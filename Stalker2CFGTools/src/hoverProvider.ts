@@ -265,7 +265,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
         : '`' + this.escapeCode(reference.refkey) + '`';
 
       markdown.appendMarkdown(
-        '**Base:** ` + this.escapeCode(reference.refurl) + '`  \n' +
+        '**Base:** `' + this.escapeCode(reference.refurl) + '`  \n' +
         '**Parent:** ' + rootLabel + '  \n'
       );
       return;
@@ -276,19 +276,19 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
       // VanillaReference file it adds no useful inheritance information.
       if (/^\[\d+\]$/.test(reference.refkey)) {
         if (!isBaseReference) {
-          markdown.appendMarkdown('**Base:** current prototype root ` + this.escapeCode(reference.refkey) + '`  \n');
+          markdown.appendMarkdown('**Base:** current prototype root `' + this.escapeCode(reference.refkey) + '`  \n');
         }
       } else {
-        markdown.appendMarkdown('**Parent:** ` + this.escapeCode(reference.refkey) + '`  \n');
+        markdown.appendMarkdown('**Parent:** `' + this.escapeCode(reference.refkey) + '`  \n');
       }
       return;
     }
 
-    markdown.appendMarkdown('**Base:** ` + this.escapeCode(reference.refurl!) + '`  \n');
+    markdown.appendMarkdown('**Base:** `' + this.escapeCode(reference.refurl!) + '`  \n');
   }
 
 
-  private heading(markdown: vscode.MarkdownString, title: string, _icon?: string): void {
+  private heading(markdown: vscode.MarkdownString, title: string): void {
     markdown.appendMarkdown('\n---\n\n### ' + this.escape(title) + '\n\n');
   }
 

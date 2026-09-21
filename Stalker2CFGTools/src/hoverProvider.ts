@@ -59,7 +59,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
 
     this.appendUsages(markdown, sid);
 
-    this.heading(markdown, 'Definition', '📍');
+    this.heading(markdown, 'Definition');
     markdown.appendMarkdown('**Kind:** ' + (primary.kind === 'struct' ? 'struct' : 'SID') + '  \n');
     markdown.appendMarkdown('**Source:** `' + this.escapeCode(vscode.workspace.asRelativePath(primary.uri, false)) + '`  \n');
     markdown.appendMarkdown('**Line:** ' + (primary.range.start.line + 1) + '  \n');
@@ -144,7 +144,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     this.appendInheritance(markdown, sid, document.uri);
     this.appendPatches(markdown, sid);
     this.appendUsages(markdown, sid);
-    this.heading(markdown, 'Definition', '📍');
+    this.heading(markdown, 'Definition');
     markdown.appendMarkdown('**Kind:** local struct  \n');
     markdown.appendMarkdown('**Source:** `' + this.escapeCode(vscode.workspace.asRelativePath(document.uri, false)) + '`  \n');
     markdown.appendMarkdown('**Line:** ' + (line + 1));
@@ -155,7 +155,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const chain = this.index.getInheritanceChain(sid, sourceUri);
     if (chain.length <= 1) return;
 
-    this.heading(markdown, 'Inheritance', '🧬');
+    this.heading(markdown, 'Inheritance');
     for (let i = 0; i < chain.length; i++) {
       const step = chain[i];
       const prefix = i === 0 ? '' : '→ ';
@@ -171,7 +171,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const patches = this.index.findPatches(sid);
     if (patches.length === 0) return;
 
-    this.heading(markdown, 'Patches', '🩹');
+    this.heading(markdown, 'Patches');
     for (const patch of patches.slice(0, 5)) {
       markdown.appendMarkdown(
         '- `' + this.escapeCode(vscode.workspace.asRelativePath(patch.uri, false)) +
@@ -187,7 +187,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const references = this.index.findReferences(sid);
     if (references.length === 0) return;
 
-    this.heading(markdown, 'Used by', '🔎');
+    this.heading(markdown, 'Used by');
     const shown = references.slice(0, 5);
     for (const reference of shown) {
       const owner = reference.owner && reference.owner !== sid ? reference.owner + ' — ' : '';

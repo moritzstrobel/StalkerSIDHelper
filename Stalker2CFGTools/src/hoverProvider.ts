@@ -141,14 +141,28 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const markdown = new vscode.MarkdownString();
     markdown.appendMarkdown('## ' + this.escape(sid) + '\n');
     this.appendReference(markdown, preview?.reference, document.uri);
+    if (preview?.reference?.bpatch) this.appendPatchTarget(markdown, sid, document.uri);
     this.appendInheritance(markdown, sid, document.uri);
-    this.appendPatches(markdown, sid, document.uri);
+    if (!preview?.reference?.bpatch) this.appendPatches(markdown, sid, document.uri);
     this.appendUsages(markdown, sid);
     this.heading(markdown, 'Definition');
     markdown.appendMarkdown('**Kind:** local struct  \n');
     markdown.appendMarkdown('**Source:** `' + this.escapeCode(vscode.workspace.asRelativePath(document.uri, false)) + '`  \n');
     markdown.appendMarkdown('**Line:** ' + (line + 1));
     return new vscode.Hover(markdown, range);
+  }
+
+  private appendPatchTarget(markdown: vscode.MarkdownString, sid: string, sourceUri: vscode.Uri): void {
+    const target = this.index.findPatchTarget(sid, sourceUri);
+    if (!target) {
+      markdown.appendMarkdown('**Target:** unresolved in configured Vanilla reference folder  \\n');
+      return;
+    }
+
+    markdown.appendMarkdown(
+      '**Target:** `' + this.escapeCode(vscode.workspace.asRelativePath(target.uri, false)) +
+      ':' + (target.range.start.line + 1) + '`  \\n'
+    );
   }
 
   private appendInheritance(markdown: vscode.MarkdownString, sid: string, sourceUri: vscode.Uri): void {

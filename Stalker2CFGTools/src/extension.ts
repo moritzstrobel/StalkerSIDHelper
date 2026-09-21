@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { StalkerDefinitionProvider } from './definitionProvider';
 import { StalkerHoverProvider } from './hoverProvider';
+import { StalkerReferenceProvider } from './referenceProvider';
 import { SymbolIndex } from './symbolIndex';
 
 function memory(): string {
@@ -43,7 +44,8 @@ export function activate(context: vscode.ExtensionContext): void {
   output.appendLine('Registering definition and hover providers...');
   context.subscriptions.push(
     vscode.languages.registerDefinitionProvider(selector, new StalkerDefinitionProvider(index)),
-    vscode.languages.registerHoverProvider(selector, new StalkerHoverProvider(index))
+    vscode.languages.registerHoverProvider(selector, new StalkerHoverProvider(index)),
+    vscode.languages.registerReferenceProvider(selector, new StalkerReferenceProvider(index))
   );
   output.appendLine('Providers registered. ' + memory());
 

@@ -29,6 +29,21 @@ export interface PatchTarget {
   path: string;
 }
 
+export interface PropertyInfo {
+  key: string;
+  value: string;
+  uri: vscode.Uri;
+  range: vscode.Range;
+  structPath: string;
+  propertyPath: string;
+}
+
+export interface PropertyComparison {
+  local: PropertyInfo;
+  target?: PropertyInfo;
+  targetStruct?: PatchTarget;
+}
+
 export interface InheritanceStep {
   sid: string;
   uri?: vscode.Uri;
@@ -160,6 +175,80 @@ export class SymbolIndex {
 
     if (stack.length === 0) return undefined;
     return { names: [...stack], path: stack.join('.'), depth: stack.length - 1 };
+  }
+
+  getPropertyAt(uri: vscode.Uri, lineNumber: number): PropertyInfo | undefined {
+    const file = this.fileTexts.get(uri.toString());
+    if (!file || lineNumber < 0 || lineNumber >= file.lines.length) return undefined;
+
+    const line = file.lines[lineNumber];
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$/);
+    if (!match) return undefined;
+
+    const struct = this.getStructPath(uri, lineNumber);
+    if (!struct) return undefined;
+
+    const key = match[1];
+    const character = line.indexOf(key);
+    return {
+      key,
+      value: match[2],
+      uri,
+      range: new vscode.Range(
+        new vscode.Position(lineNumber, character),
+        new vscode.Position(lineNumber, character + key.length)
+      ),
+      structPath: struct.path,
+      propertyPath: struct.path + '.' + key
+    };
+  }
+
+  comparePatchedProperty(uri: vscode.Uri, lineNumber: number): PropertyComparison | undefined {
+    const local = this.getPropertyAt(uri, lineNumber);
+    if (!local) return undefined;
+
+    const struct = this.getStructPath(uri, lineNumber);
+    if (!struct) return { local };
+
+    const targetStruct = this.findPatchTargetAt(uri, this.findStructHeaderLine(uri, lineNumber, struct.names.length));
+    if (!targetStruct) return { local };
+
+    const target = this.findDirectProperty(targetStruct.uri, targetStruct.range.start.line, local.key);
+    return { local, target, targetStruct };
+  }
+
+  private findStructHeaderLine(uri: vscode.Uri, lineNumber: number, depth: number): number {
+    const file = this.fileTexts.get(uri.toString());
+    if (!file) return lineNumber;
+    const stack: number[] = [];
+    for (let line = 0; line <= lineNumber && line < file.lines.length; line++) {
+      const text = file.lines[line];
+      if (text.match(STRUCT_DEFINITION)) stack.push(line);
+      const ends = (text.match(/struct\.end\b/g) ?? []).length;
+      for (let i = 0; i < ends; i++) stack.pop();
+    }
+    return stack[Math.max(0, depth - 1)] ?? lineNumber;
+  }
+
+  private findDirectProperty(uri: vscode.Uri, structLine: number, key: string): PropertyInfo | undefined {
+    const file = this.fileTexts.get(uri.toString());
+    if (!file) return undefined;
+
+    let depth = 1;
+    for (let line = structLine + 1; line < file.lines.length && depth > 0; line++) {
+      const text = file.lines[line];
+      const begins = (text.match(/struct\.begin\b/g) ?? []).length;
+      const ends = (text.match(/struct\.end\b/g) ?? []).length;
+
+      if (depth === 1 && begins === 0 && ends === 0) {
+        const match = text.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$/);
+        if (match?.[1] === key) return this.getPropertyAt(uri, line);
+      }
+
+      depth += begins;
+      depth -= ends;
+    }
+    return undefined;
   }
 
   findPatchTargetAt(patchUri: vscode.Uri, lineNumber: number): PatchTarget | undefined {

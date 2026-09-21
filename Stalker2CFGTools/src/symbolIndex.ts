@@ -5,12 +5,26 @@ const STRUCT_DEFINITION = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*struct\.begin\b/;
 const SID_ASSIGNMENT = /^\s*SID\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\b/;
 const decoder = new TextDecoder('utf-8');
 const IDENTIFIER = /\b[A-Za-z_][A-Za-z0-9_]*\b/g;
+const ENUM_VALUE = /\b(E[A-Za-z_][A-Za-z0-9_]*)::([A-Za-z_][A-Za-z0-9_]*)\b/g;
 
 export interface SidReference {
   sid: string;
   uri: vscode.Uri;
   range: vscode.Range;
   owner?: string;
+}
+
+export interface EnumUsage {
+  type: string;
+  value: string;
+  uri: vscode.Uri;
+  range: vscode.Range;
+  owner?: string;
+}
+
+export interface EnumValueSummary {
+  value: string;
+  count: number;
 }
 
 export interface IndexStats {
@@ -23,6 +37,7 @@ export interface IndexStats {
 export class SymbolIndex {
   private readonly definitions = new Map<string, SidDefinition[]>();
   private readonly references = new Map<string, SidReference[]>();
+  private readonly enumUsages = new Map<string, Map<string, EnumUsage[]>>();
   private readonly fileTexts = new Map<string, { uri: vscode.Uri; lines: string[] }>();
   private output?: vscode.OutputChannel;
 
@@ -33,6 +48,7 @@ export class SymbolIndex {
   clear(): void {
     this.definitions.clear();
     this.references.clear();
+    this.enumUsages.clear();
     this.fileTexts.clear();
   }
 
@@ -47,6 +63,7 @@ export class SymbolIndex {
     }
 
     this.buildReferences();
+    this.buildEnums();
     const definitions = Array.from(this.definitions.values()).reduce((sum, entries) => sum + entries.length, 0);
     const stats = {
       files: files.length,
@@ -82,6 +99,64 @@ export class SymbolIndex {
 
       const sidMatch = line.match(SID_ASSIGNMENT);
       if (sidMatch) this.add(sidMatch[1], uri, lineNumber, line.indexOf(sidMatch[1]), 'sid');
+    }
+  }
+
+  findEnumValues(type: string): EnumValueSummary[] {
+    const values = this.enumUsages.get(type);
+    if (!values) return [];
+    return [...values.entries()]
+      .map(([value, usages]) => ({ value, count: usages.length }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  }
+
+  findEnumUsages(type: string, value?: string): EnumUsage[] {
+    const values = this.enumUsages.get(type);
+    if (!values) return [];
+    const usages = value
+      ? [...(values.get(value) ?? [])]
+      : [...values.values()].flat();
+    return usages.sort(
+      (a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath) || a.range.start.line - b.range.start.line
+    );
+  }
+
+  private buildEnums(): void {
+    this.enumUsages.clear();
+
+    for (const { uri, lines } of this.fileTexts.values()) {
+      let owner: string | undefined;
+      let depth = 0;
+
+      for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
+        const line = lines[lineNumber];
+        const topStruct = line.match(STRUCT_DEFINITION);
+        if (topStruct && depth === 0) owner = topStruct[1];
+
+        ENUM_VALUE.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = ENUM_VALUE.exec(line)) !== null) {
+          const type = match[1];
+          const value = match[2];
+          const valueOffset = match.index + type.length + 2;
+          const range = new vscode.Range(
+            new vscode.Position(lineNumber, valueOffset),
+            new vscode.Position(lineNumber, valueOffset + value.length)
+          );
+          const values = this.enumUsages.get(type) ?? new Map<string, EnumUsage[]>();
+          const usages = values.get(value) ?? [];
+          usages.push({ type, value, uri, range, owner });
+          values.set(value, usages);
+          this.enumUsages.set(type, values);
+        }
+
+        depth += (line.match(/struct\.begin\b/g) ?? []).length;
+        depth -= (line.match(/struct\.end\b/g) ?? []).length;
+        if (depth <= 0) {
+          depth = 0;
+          owner = undefined;
+        }
+      }
     }
   }
 

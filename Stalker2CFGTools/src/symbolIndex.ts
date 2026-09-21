@@ -112,6 +112,7 @@ export class SymbolIndex {
     const lines = text.split(/\r?\n/);
     this.fileTexts.set(uri.toString(), { uri, lines });
 
+    let depth = 0;
     for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
       const line = lines[lineNumber];
       const structMatch = line.match(STRUCT_DEFINITION);
@@ -119,24 +120,50 @@ export class SymbolIndex {
         const sid = structMatch[1];
         const character = line.indexOf(sid);
         this.add(sid, uri, lineNumber, character, 'struct');
-        this.addPrototype(sid, uri, lineNumber, character, structMatch[2]);
+        if (depth === 0) this.addPrototype(sid, uri, lineNumber, character, structMatch[2]);
       }
 
       const sidMatch = line.match(SID_ASSIGNMENT);
       if (sidMatch) this.add(sidMatch[1], uri, lineNumber, line.indexOf(sidMatch[1]), 'sid');
+
+      depth += (line.match(/struct\.begin\b/g) ?? []).length;
+      depth -= (line.match(/struct\.end\b/g) ?? []).length;
+      if (depth < 0) depth = 0;
     }
   }
 
   findPrototype(sid: string, sourceUri?: vscode.Uri): PrototypeNode | undefined {
     const entries = [...(this.prototypes.get(sid) ?? [])].filter((entry) => entry.kind === 'definition');
+
+    // A mod bpatch always targets the vanilla definition. Do not let another
+    // mod definition with the same SID become the inheritance root.
+    if (sourceUri && this.isPatchAt(sourceUri, sid)) {
+      return this.sortPrototypeCandidates(entries.filter((entry) => entry.isReference), sourceUri)[0];
+    }
+
     return this.sortPrototypeCandidates(entries, sourceUri)[0];
   }
 
-  findPatches(sid: string): PrototypeNode[] {
-    return [...(this.prototypes.get(sid) ?? [])]
-      .filter((entry) => entry.kind === 'patch')
-      .sort((a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath) || a.range.start.line - b.range.start.line);
+  findPatches(sid: string, sourceUri?: vscode.Uri): PrototypeNode[] {
+    const patches = [...(this.prototypes.get(sid) ?? [])].filter((entry) => entry.kind === 'patch');
+    if (!sourceUri) return patches.sort(this.prototypeLocationSort);
+
+    // On a patch hover only show the current patch. Same SIDs in other CFG
+    // families patch their own vanilla nodes and are not sibling patches here.
+    const source = sourceUri.toString();
+    return patches
+      .filter((entry) => entry.uri.toString() === source)
+      .sort(this.prototypeLocationSort);
   }
+
+  private isPatchAt(uri: vscode.Uri, sid: string): boolean {
+    return (this.prototypes.get(sid) ?? []).some(
+      (entry) => entry.kind === 'patch' && entry.uri.toString() === uri.toString()
+    );
+  }
+
+  private readonly prototypeLocationSort = (a: PrototypeNode, b: PrototypeNode): number =>
+    a.uri.fsPath.localeCompare(b.uri.fsPath) || a.range.start.line - b.range.start.line;
 
   getInheritanceChain(sid: string, sourceUri?: vscode.Uri, maxDepth = 32): InheritanceStep[] {
     const chain: InheritanceStep[] = [];
@@ -216,14 +243,14 @@ export class SymbolIndex {
 
     const requested = refurl.substring('@BaseGame/'.length).replace(/\\/g, '/').toLowerCase();
     const fileName = requested.substring(requested.lastIndexOf('/') + 1);
-    const basePaths = this.referencePaths();
+    const basePath = this.vanillaReferencePath();
 
     const candidates = [...this.fileTexts.values()]
       .map((entry) => entry.uri)
       .filter((uri) => {
         const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
         const lower = relative.toLowerCase();
-        if (!basePaths.some((base) => lower === base || lower.startsWith(base + '/'))) return false;
+        if (!basePath || (lower !== basePath && !lower.startsWith(basePath + '/'))) return false;
         return lower.endsWith('/' + requested) || lower.endsWith('/' + fileName) || lower === fileName;
       })
       .sort((a, b) => {
@@ -378,18 +405,20 @@ export class SymbolIndex {
     this.definitions.set(sid, entries);
   }
 
-  private referencePaths(): string[] {
-    return vscode.workspace.getConfiguration('stalker2Cfg').get<string[]>('referencePaths', [])
-      .map((configuredPath) => configuredPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '').toLowerCase())
-      .filter((configuredPath) => configuredPath.length > 0);
+  private vanillaReferencePath(): string {
+    return vscode.workspace.getConfiguration('stalker2Cfg').get<string>('vanillaReferencePath', '')
+      .replace(/\\/g, '/')
+      .replace(/^\.\//, '')
+      .replace(/\/$/, '')
+      .toLowerCase();
   }
 
   private isReferencePath(uri: vscode.Uri): boolean {
     if (!vscode.workspace.getWorkspaceFolder(uri)) return false;
+    const base = this.vanillaReferencePath();
+    if (!base) return false;
     const relativePath = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/').toLowerCase();
-    return this.referencePaths().some(
-      (base) => relativePath === base || relativePath.startsWith(base + '/')
-    );
+    return relativePath === base || relativePath.startsWith(base + '/');
   }
 
   private kindPriority(kind: DefinitionKind): number {

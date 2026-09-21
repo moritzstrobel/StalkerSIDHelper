@@ -10,6 +10,7 @@ const decoder = new TextDecoder('utf-8');
 interface StructReference {
   refurl?: string;
   refkey?: string;
+  bpatch: boolean;
 }
 
 interface StructPreview {
@@ -49,7 +50,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const markdown = new vscode.MarkdownString();
     markdown.appendMarkdown('**' + this.escape(sid) + '**\n\n');
 
-    this.appendReference(markdown, preview?.reference);
+    this.appendReference(markdown, preview?.reference, primary.uri);
 
     if (preview && preview.properties.length > 0) {
       markdown.appendMarkdown('\n');
@@ -161,30 +162,49 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     if (!attributes) return undefined;
     const refurl = attributes.match(/(?:^|;)\s*refurl\s*=\s*([^;}]+)/)?.[1]?.trim();
     const refkey = attributes.match(/(?:^|;)\s*refkey\s*=\s*([^;}]+)/)?.[1]?.trim();
-    if (!refurl && !refkey) return undefined;
-    return { refurl, refkey };
+    const bpatch = /(?:^|;)\s*bpatch(?:\s*(?:=\s*true)?)?(?=;|$)/i.test(attributes.trim());
+    if (!refurl && !refkey && !bpatch) return undefined;
+    return { refurl, refkey, bpatch };
   }
 
-  private appendReference(markdown: vscode.MarkdownString, reference?: StructReference): void {
+  private appendReference(markdown: vscode.MarkdownString, reference: StructReference | undefined, uri: vscode.Uri): void {
     if (!reference) return;
+
+    const source = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+    const isBaseReference = this.isBaseReferenceSource(source);
+
+    if (reference.bpatch) {
+      markdown.appendMarkdown('**Patch:** modifies existing node  \n');
+      return;
+    }
 
     if (reference.refurl && reference.refkey) {
       markdown.appendMarkdown(
-        '**Reference:** `' + this.escapeCode(reference.refurl) + '` → `' + this.escapeCode(reference.refkey) + '`  \n'
+        '**Base:** `' + this.escapeCode(reference.refurl) + '`  \n' +
+        '**Root:** `' + this.escapeCode(reference.refkey) + '`  \n'
       );
       return;
     }
 
     if (reference.refkey) {
+      // [0] is the root/base node of the current prototype context. In a
+      // VanillaReference file it adds no useful inheritance information.
       if (/^\[\d+\]$/.test(reference.refkey)) {
-        markdown.appendMarkdown('**Reference:** base entry `' + this.escapeCode(reference.refkey) + '`  \n');
+        if (!isBaseReference) {
+          markdown.appendMarkdown('**Base:** current prototype root `' + this.escapeCode(reference.refkey) + '`  \n');
+        }
       } else {
         markdown.appendMarkdown('**Parent:** `' + this.escapeCode(reference.refkey) + '`  \n');
       }
       return;
     }
 
-    markdown.appendMarkdown('**Reference file:** `' + this.escapeCode(reference.refurl!) + '`  \n');
+    markdown.appendMarkdown('**Base:** `' + this.escapeCode(reference.refurl!) + '`  \n');
+  }
+
+  private isBaseReferenceSource(relativePath: string): boolean {
+    const normalized = relativePath.replace(/\\/g, '/').toLowerCase();
+    return normalized.includes('/vanillareference/') || normalized.startsWith('python/vanillareference/');
   }
 
   private escape(value: string): string {

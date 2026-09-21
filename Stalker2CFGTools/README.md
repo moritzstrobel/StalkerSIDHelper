@@ -9,9 +9,33 @@ Small VS Code extension for working with STALKER 2 `.cfg` files.
   - `GunAK74_ST : struct.begin`
   - `SID = GunAK74_ST`
 - Supports **Go to Definition** / **F12** / **Ctrl+Click** for SIDs
+- Understands configurable reference folders and prioritizes definitions found there
+- Prefers struct headers over duplicate `SID = ...` declarations
 - Automatically re-indexes CFG files when they are created or changed
+- Re-indexes when the reference path configuration changes
 
-This is intentionally a small first step. A full parser or language server is not required for the initial SID navigation feature.
+## Reference paths
+
+The extension can distinguish your mod files from vanilla/reference CFGs. The default configuration is:
+
+```json
+{
+  "stalker2Cfg.referencePaths": [
+    "Python/VanillaReference",
+    "GameLite/GameData"
+  ]
+}
+```
+
+Paths are relative to the opened workspace.
+
+This is particularly useful for patches such as:
+
+```cfg
+GunM16_ST : struct.begin {bpatch}
+```
+
+If `GunM16_ST` also exists below a configured reference path, that reference definition is returned first by **Go to Definition**. VS Code can still expose additional matching definitions when more than one exists.
 
 ## Development
 
@@ -45,10 +69,9 @@ Ctrl+Clicking `GunAK74_ST` should jump to its indexed definition.
 
 ## Next ideas
 
-- Prefer vanilla/reference definitions when navigating from patches
-- Hover information
+- Hover information showing definition type and source
 - Find All References
-- Better support for `refkey`, prototype fields and patch semantics
-- Workspace/reference path configuration
+- Explicit `refkey` / patch relationship information
 - Syntax highlighting
+- More intelligent duplicate-definition handling
 - Dedicated CFG parser if regex indexing becomes too limited

@@ -55,7 +55,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
 
     this.appendReference(markdown, preview?.reference, primary.uri);
     this.appendInheritance(markdown, sid, primary.uri);
-    this.appendPatches(markdown, sid);
+    this.appendPatches(markdown, sid, primary.uri);
 
     this.appendUsages(markdown, sid);
 
@@ -142,7 +142,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     markdown.appendMarkdown('## ' + this.escape(sid) + '\n');
     this.appendReference(markdown, preview?.reference, document.uri);
     this.appendInheritance(markdown, sid, document.uri);
-    this.appendPatches(markdown, sid);
+    this.appendPatches(markdown, sid, document.uri);
     this.appendUsages(markdown, sid);
     this.heading(markdown, 'Definition');
     markdown.appendMarkdown('**Kind:** local struct  \n');
@@ -167,8 +167,8 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     }
   }
 
-  private appendPatches(markdown: vscode.MarkdownString, sid: string): void {
-    const patches = this.index.findPatches(sid);
+  private appendPatches(markdown: vscode.MarkdownString, sid: string, sourceUri: vscode.Uri): void {
+    const patches = this.index.findPatches(sid, sourceUri);
     if (patches.length === 0) return;
 
     this.heading(markdown, 'Patches');

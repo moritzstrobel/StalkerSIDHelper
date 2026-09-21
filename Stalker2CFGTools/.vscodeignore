@@ -1,0 +1,14 @@
+# Development sources
+.vscode/
+src/
+tsconfig.json
+
+# Repository/development files
+.gitignore
+README.md
+
+# Dependencies not needed at runtime
+node_modules/
+
+# Generated packages
+*.vsix

@@ -75,7 +75,7 @@ export function activate(context: vscode.ExtensionContext): void {
         output.appendLine('Configuration changed: enableIndexing=' + indexingEnabled());
         if (indexingEnabled()) void rebuildIndex();
         else index.clear();
-      } else if (event.affectsConfiguration('stalker2Cfg.referencePaths')) {
+      } else if (event.affectsConfiguration('stalker2Cfg.vanillaReferencePath')) {
         void rebuildIndex();
       }
     })

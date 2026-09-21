@@ -155,7 +155,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
   private appendPatchTarget(markdown: vscode.MarkdownString, sid: string, sourceUri: vscode.Uri): void {
     const target = this.index.findPatchTarget(sid, sourceUri);
     if (!target) {
-      markdown.appendMarkdown('**Target:** unresolved in configured Vanilla reference folder  \\n');
+      markdown.appendMarkdown('**Target:** *unresolved*  \n');
       return;
     }
 

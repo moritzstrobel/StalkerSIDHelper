@@ -36,17 +36,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     output.appendLine('Rebuilding CFG index...');
-    rebuildInProgress = index.rebuild()
+    const rebuild = index.rebuild()
+      .then(() => undefined)
       .catch((error) => {
         output.appendLine('INDEX ERROR: ' + String(error));
         if (error instanceof Error && error.stack) output.appendLine(error.stack);
         console.error('STALKER 2 CFG Tools index error', error);
       })
       .finally(() => {
-        rebuildInProgress = undefined;
+        if (rebuildInProgress === rebuild) rebuildInProgress = undefined;
       });
 
-    return rebuildInProgress;
+    rebuildInProgress = rebuild;
+    return rebuild;
   };
 
   if (indexingEnabled()) {

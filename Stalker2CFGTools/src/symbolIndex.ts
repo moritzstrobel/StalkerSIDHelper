@@ -27,16 +27,16 @@ export class SymbolIndex {
   async rebuild(): Promise<IndexStats> {
     const started = Date.now();
     this.clear();
-    this.output?.appendLine('Discovering CFG files...');
+    this.output?.appendLine('Discovering CFG files... ' + this.memory());
 
     const files = await vscode.workspace.findFiles('**/*.cfg', '**/{node_modules,.git,out,dist}/**');
-    this.output?.appendLine('Found ' + files.length + ' CFG files.');
+    this.output?.appendLine('Found ' + files.length + ' CFG files. ' + this.memory());
 
     const batchSize = 25;
     for (let i = 0; i < files.length; i += batchSize) {
       const batch = files.slice(i, i + batchSize);
       await Promise.all(batch.map((uri) => this.indexFile(uri)));
-      this.output?.appendLine('Indexed ' + Math.min(i + batch.length, files.length) + '/' + files.length);
+      this.output?.appendLine('Indexed ' + Math.min(i + batch.length, files.length) + '/' + files.length + ' ' + this.memory());
     }
 
     const definitions = Array.from(this.definitions.values()).reduce((sum, entries) => sum + entries.length, 0);
@@ -117,7 +117,7 @@ export class SymbolIndex {
     });
   }
 
-  private kindPriority(kind: DefinitionKind): number {
+  private memory(): string {\n    const usage = process.memoryUsage();\n    const mb = (value: number) => (value / 1024 / 1024).toFixed(1) + ' MB';\n    return '[rss=' + mb(usage.rss) + ', heapUsed=' + mb(usage.heapUsed) + ']';\n  }\n\n  private kindPriority(kind: DefinitionKind): number {
     return kind === 'struct' ? 0 : 1;
   }
 

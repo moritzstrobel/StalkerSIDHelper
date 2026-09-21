@@ -144,7 +144,13 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     if (preview?.reference?.bpatch) this.appendPatchTarget(markdown, sid, document.uri, line);
     this.appendInheritance(markdown, sid, document.uri);
     if (!preview?.reference?.bpatch) this.appendPatches(markdown, sid, document.uri);
-    this.appendUsages(markdown, sid);
+
+    // Nested struct names such as Upgrades, Effects or PostShooting are local
+    // path components, not globally unique SIDs. Global usage lookup by the
+    // bare name produces unrelated references.
+    const structPath = this.index.getStructPath(document.uri, line);
+    if (!structPath || structPath.depth === 0) this.appendUsages(markdown, sid);
+
     this.heading(markdown, 'Definition');
     markdown.appendMarkdown('**Kind:** local struct  \n');
     markdown.appendMarkdown('**Source:** `' + this.escapeCode(vscode.workspace.asRelativePath(document.uri, false)) + '`  \n');

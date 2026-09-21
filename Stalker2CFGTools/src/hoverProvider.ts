@@ -104,15 +104,16 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
         markdown.appendMarkdown('**Vanilla:** *not defined directly on patch target*');
       }
     } else if (comparison?.mode === 'inheritance') {
-      markdown.appendMarkdown('**Mode:** override  \n');
       if (comparison.target) {
+        markdown.appendMarkdown('**Mode:** override  \n');
         markdown.appendMarkdown('**Inherited:** `' + this.escapeCode(comparison.target.value) + '`  \n');
         if (comparison.inheritedFrom) {
           markdown.appendMarkdown('**From:** `' + this.escapeCode(comparison.inheritedFrom) + '`  \n');
         }
         this.appendPropertySource(markdown, comparison.target);
       } else {
-        markdown.appendMarkdown('**Inherited:** *no matching property found in parent chain*');
+        markdown.appendMarkdown('**Mode:** local  \n');
+        markdown.appendMarkdown('**Inherited:** *not defined*');
       }
     }
 

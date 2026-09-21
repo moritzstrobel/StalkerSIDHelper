@@ -28,6 +28,9 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
 
     const sid = document.getText(range);
 
+    const propertyHover = this.buildPropertyHover(document, position, range, sid);
+    if (propertyHover) return propertyHover;
+
     const enumHover = this.buildEnumHover(document, position, range, sid);
     if (enumHover) return enumHover;
 
@@ -74,6 +77,38 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     }
 
     markdown.appendMarkdown('\n\n*F12 / Ctrl+Click to open definition*');
+    return new vscode.Hover(markdown, range);
+  }
+
+  private buildPropertyHover(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    range: vscode.Range,
+    word: string
+  ): vscode.Hover | undefined {
+    const property = this.index.getPropertyAt(document.uri, position.line);
+    if (!property || property.key !== word) return undefined;
+
+    const comparison = this.index.comparePatchedProperty(document.uri, position.line);
+    const markdown = new vscode.MarkdownString();
+    markdown.appendMarkdown('## ' + this.escape(property.key) + '\n\n');
+    markdown.appendMarkdown('**Value:** `' + this.escapeCode(property.value) + '`  \n');
+    markdown.appendMarkdown('**Path:** `' + this.escapeCode(property.propertyPath) + '`  \n');
+
+    if (comparison?.targetStruct) {
+      if (comparison.target) {
+        markdown.appendMarkdown('**Vanilla:** `' + this.escapeCode(comparison.target.value) + '`  \n');
+        const source = vscode.workspace.asRelativePath(comparison.target.uri, false).replace(/\\\\/g, '/');
+        const fileName = source.split('/').pop() ?? source;
+        markdown.appendMarkdown(
+          '**Target:** `' + this.escapeCode(fileName) + ':' +
+          (comparison.target.range.start.line + 1) + '`'
+        );
+      } else {
+        markdown.appendMarkdown('**Vanilla:** *not defined directly on target struct*');
+      }
+    }
+
     return new vscode.Hover(markdown, range);
   }
 

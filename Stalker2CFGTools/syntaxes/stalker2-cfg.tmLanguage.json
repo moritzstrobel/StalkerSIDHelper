@@ -7,6 +7,9 @@
       "include": "#comments"
     },
     {
+      "include": "#assetReferences"
+    },
+    {
       "include": "#strings"
     },
     {
@@ -16,6 +19,9 @@
       "include": "#metadata"
     },
     {
+      "include": "#inlineModifiers"
+    },
+    {
       "include": "#arrayIndices"
     },
     {
@@ -23,6 +29,9 @@
     },
     {
       "include": "#booleans"
+    },
+    {
+      "include": "#timeValues"
     },
     {
       "include": "#numbers"
@@ -98,7 +107,7 @@
           }
         },
         {
-          "match": "\\b(refkey)\\s*(=)\\s*([^;,}]+)",
+          "match": "\\b(refkey)\\s*(=)\\s*(\\[(?:\\d+|\\*)\\]|[A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "support.type.property-name.stalker2cfg"
@@ -110,22 +119,18 @@
               "name": "variable.other.reference.stalker2cfg"
             }
           }
-        },
-        {
-          "match": "\\{\\s*(bpatch|bdelete|bskipref)\\s*\\}",
-          "captures": {
-            "1": {
-              "name": "storage.modifier.patch.stalker2cfg"
-            }
-          }
         }
       ]
     },
     "arrayIndices": {
       "patterns": [
         {
+          "name": "constant.other.array-index.append.stalker2cfg",
+          "match": "\\[\\*\\]"
+        },
+        {
           "name": "constant.numeric.array-index.stalker2cfg",
-          "match": "\\[(?:\\d+|\\*)\\]"
+          "match": "\\[\\d+\\]"
         }
       ]
     },
@@ -188,7 +193,7 @@
         },
         {
           "name": "storage.modifier.patch.stalker2cfg",
-          "match": "\\b(?:bpatch|bdelete|bskipref)\\b"
+          "match": "\\b(?:bpatch|bdelete|bskipref|removenode)\\b"
         }
       ]
     },
@@ -201,6 +206,42 @@
               "name": "variable.other.sid.stalker2cfg"
             }
           }
+        }
+      ]
+    },
+    "assetReferences": {
+      "patterns": [
+        {
+          "name": "string.unquoted.asset.stalker2cfg",
+          "match": "(?:/Script/[A-Za-z0-9_./-]+)?[A-Za-z_][A-Za-z0-9_]*'/(?:Game|Testmod)/[^'\\r\\n]+'"
+        },
+        {
+          "name": "string.unquoted.asset.stalker2cfg",
+          "match": "/Script/[A-Za-z0-9_./-]+'/(?:Game|Testmod)/[^'\\r\\n]+'"
+        }
+      ]
+    },
+    "inlineModifiers": {
+      "patterns": [
+        {
+          "match": "\\{\\s*(bpatch|bdelete|bskipref)\\s*\\}",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.patch.stalker2cfg"
+            }
+          }
+        },
+        {
+          "name": "storage.modifier.patch.stalker2cfg",
+          "match": "\\bremovenode\\b"
+        }
+      ]
+    },
+    "timeValues": {
+      "patterns": [
+        {
+          "name": "constant.numeric.time.stalker2cfg",
+          "match": "(?<![A-Za-z0-9_])[-+]?\\d+(?:\\.\\d+)?(?:ms|s|min|h|d)\\b"
         }
       ]
     }

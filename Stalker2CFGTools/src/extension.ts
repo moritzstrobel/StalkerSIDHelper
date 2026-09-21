@@ -5,13 +5,17 @@ import { SymbolIndex } from './symbolIndex';
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const index = new SymbolIndex();
 
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Window,
-      title: 'Indexing STALKER 2 CFG SIDs...'
-    },
-    () => index.rebuild()
-  );
+  const rebuildIndex = async (): Promise<void> => {
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Window,
+        title: 'Indexing STALKER 2 CFG SIDs...'
+      },
+      () => index.rebuild()
+    );
+  };
+
+  await rebuildIndex();
 
   context.subscriptions.push(
     vscode.languages.registerDefinitionProvider(
@@ -24,9 +28,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   watcher.onDidCreate((uri) => index.indexFile(uri), undefined, context.subscriptions);
   watcher.onDidChange((uri) => index.indexFile(uri), undefined, context.subscriptions);
-  watcher.onDidDelete(() => index.rebuild(), undefined, context.subscriptions);
+  watcher.onDidDelete(() => rebuildIndex(), undefined, context.subscriptions);
 
-  context.subscriptions.push(watcher);
+  context.subscriptions.push(
+    watcher,
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('stalker2Cfg.referencePaths')) {
+        void rebuildIndex();
+      }
+    })
+  );
 }
 
 export function deactivate(): void {}

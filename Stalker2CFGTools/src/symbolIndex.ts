@@ -164,9 +164,25 @@ export class SymbolIndex {
     if (rebuildDerived) this.rebuildDerivedIndexes();
   }
 
-  private rebuildDerivedIndexes(): void {
+  rebuildReferences(): number {
     this.buildReferences();
+    return Array.from(this.references.values()).reduce((sum, entries) => sum + entries.length, 0);
+  }
+
+  rebuildEnums(): { types: number; values: number; usages: number } {
     this.buildEnums();
+    let values = 0;
+    let usages = 0;
+    for (const enumValues of this.enumUsages.values()) {
+      values += enumValues.size;
+      for (const entries of enumValues.values()) usages += entries.length;
+    }
+    return { types: this.enumUsages.size, values, usages };
+  }
+
+  private rebuildDerivedIndexes(): void {
+    this.rebuildReferences();
+    this.rebuildEnums();
   }
 
   getStructPath(uri: vscode.Uri, lineNumber: number): StructPathInfo | undefined {

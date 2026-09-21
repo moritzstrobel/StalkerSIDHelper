@@ -14,8 +14,9 @@ export class StalkerDefinitionProvider implements vscode.DefinitionProvider {
   ): vscode.Definition | undefined {
     const line = document.lineAt(position.line).text;
 
-    // @BaseGame/... is a file reference rather than a SID. Resolve it to the
-    // configured VanillaReference copy so Ctrl+Click/F12 can open that CFG.
+    // @BaseGame/... is a file reference rather than a SID. Resolve it through
+    // the configured referencePaths so Ctrl+Click/F12 works with different
+    // mod workspace layouts.
     const baseGameLocation = this.baseGameReferenceAtPosition(document, position, line);
     if (baseGameLocation) {
       return baseGameLocation;
@@ -63,17 +64,7 @@ export class StalkerDefinitionProvider implements vscode.DefinitionProvider {
     const valueRange = new vscode.Range(position.line, valueStart, position.line, valueStart + value.length);
     if (!valueRange.contains(position)) return undefined;
 
-    const fileName = value.substring(value.lastIndexOf('/') + 1);
-    const folders = vscode.workspace.workspaceFolders ?? [];
-    for (const folder of folders) {
-      const target = vscode.Uri.joinPath(folder.uri, 'Python', 'VanillaReference', fileName);
-      try {
-        // URI existence is checked by VS Code when the definition is opened.
-        return new vscode.Location(target, new vscode.Position(0, 0));
-      } catch {
-        continue;
-      }
-    }
-    return undefined;
+    const target = this.index.resolveBaseGameRef(value);
+    return target ? new vscode.Location(target, new vscode.Position(0, 0)) : undefined;
   }
 }

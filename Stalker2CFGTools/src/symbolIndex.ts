@@ -3,6 +3,7 @@ import { DefinitionKind, SidDefinition } from './types';
 
 const STRUCT_DEFINITION = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*struct\.begin\b/;
 const SID_ASSIGNMENT = /^\s*SID\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\b/;
+const decoder = new TextDecoder('utf-8');
 
 export class SymbolIndex {
   private readonly definitions = new Map<string, SidDefinition[]>();
@@ -19,24 +20,41 @@ export class SymbolIndex {
       '**/{node_modules,.git,out,dist}/**'
     );
 
-    await Promise.all(files.map((uri) => this.indexFile(uri)));
+    // Do not open every CFG as a VS Code TextDocument. Large STALKER workspaces
+    // contain many huge reference CFGs and doing that in parallel can exhaust
+    // the Extension Host. Read bytes through workspace.fs and index in batches.
+    const batchSize = 25;
+    for (let i = 0; i < files.length; i += batchSize) {
+      const batch = files.slice(i, i + batchSize);
+      await Promise.all(batch.map((uri) => this.indexFile(uri)));
+    }
   }
 
   async indexFile(uri: vscode.Uri): Promise<void> {
-    const document = await vscode.workspace.openTextDocument(uri);
     this.removeFile(uri);
 
-    for (let lineNumber = 0; lineNumber < document.lineCount; lineNumber++) {
-      const text = document.lineAt(lineNumber).text;
+    let bytes: Uint8Array;
+    try {
+      bytes = await vscode.workspace.fs.readFile(uri);
+    } catch (error) {
+      console.warn(`STALKER 2 CFG Tools: failed to read ${uri.fsPath}`, error);
+      return;
+    }
 
-      const structMatch = text.match(STRUCT_DEFINITION);
+    const text = decoder.decode(bytes);
+    const lines = text.split(/\r?\n/);
+
+    for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
+      const line = lines[lineNumber];
+
+      const structMatch = line.match(STRUCT_DEFINITION);
       if (structMatch) {
-        this.add(structMatch[1], uri, lineNumber, text.indexOf(structMatch[1]), 'struct');
+        this.add(structMatch[1], uri, lineNumber, line.indexOf(structMatch[1]), 'struct');
       }
 
-      const sidMatch = text.match(SID_ASSIGNMENT);
+      const sidMatch = line.match(SID_ASSIGNMENT);
       if (sidMatch) {
-        this.add(sidMatch[1], uri, lineNumber, text.indexOf(sidMatch[1]), 'sid');
+        this.add(sidMatch[1], uri, lineNumber, line.indexOf(sidMatch[1]), 'sid');
       }
     }
   }
@@ -50,8 +68,6 @@ export class SymbolIndex {
         return referenceDifference;
       }
 
-      // When navigating inside the actual definition file, keep the local
-      // definition convenient instead of always bouncing into VanillaReference.
       if (sourceUri) {
         const source = sourceUri.toString();
         const aLocal = a.uri.toString() === source ? 1 : 0;
@@ -61,8 +77,6 @@ export class SymbolIndex {
         }
       }
 
-      // A struct header is generally the useful target. "SID = Foo" usually
-      // lives inside that same struct and would otherwise create duplicates.
       const kindDifference = this.kindPriority(a.kind) - this.kindPriority(b.kind);
       if (kindDifference !== 0) {
         return kindDifference;
@@ -99,8 +113,7 @@ export class SymbolIndex {
     const configuration = vscode.workspace.getConfiguration('stalker2Cfg');
     const configuredPaths = configuration.get<string[]>('referencePaths', []);
 
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-    if (!workspaceFolder) {
+    if (!vscode.workspace.getWorkspaceFolder(uri)) {
       return false;
     }
 

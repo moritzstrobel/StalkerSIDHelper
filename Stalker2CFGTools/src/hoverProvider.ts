@@ -179,9 +179,13 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     }
 
     if (reference.refurl && reference.refkey) {
+      const rootLabel = /^\[\d+\]$/.test(reference.refkey)
+        ? 'root prototype'
+        : '`' + this.escapeCode(reference.refkey) + '`';
+
       markdown.appendMarkdown(
         '**Base:** `' + this.escapeCode(reference.refurl) + '`  \n' +
-        '**Root:** `' + this.escapeCode(reference.refkey) + '`  \n'
+        '**Inheritance:** ' + rootLabel + '  \n'
       );
       return;
     }

@@ -52,14 +52,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
 
     this.appendReference(markdown, preview?.reference, primary.uri);
 
-    if (preview && preview.properties.length > 0) {
-      markdown.appendMarkdown('\n');
-      for (const property of preview.properties) {
-        markdown.appendMarkdown('**' + this.escape(property.key) + ':** `' + this.escapeCode(property.value) + '`  \n');
-      }
-      if (preview.truncated) markdown.appendMarkdown('*…more properties in definition*  \n');
-      markdown.appendMarkdown('\n---\n\n');
-    }
+    this.appendUsages(markdown, sid);
 
     markdown.appendMarkdown('**Definition:** ' + (primary.kind === 'struct' ? 'struct' : 'SID') + '  \n');
     markdown.appendMarkdown('**Source:** `' + this.escapeCode(vscode.workspace.asRelativePath(primary.uri, false)) + '`  \n');
@@ -106,18 +99,30 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const markdown = new vscode.MarkdownString();
     markdown.appendMarkdown('**' + this.escape(sid) + '**\n\n');
     this.appendReference(markdown, preview?.reference, document.uri);
-    if (preview && preview.properties.length > 0) {
-      markdown.appendMarkdown('\n');
-      for (const property of preview.properties) {
-        markdown.appendMarkdown('**' + this.escape(property.key) + ':** `' + this.escapeCode(property.value) + '`  \n');
-      }
-      if (preview.truncated) markdown.appendMarkdown('*…more properties in definition*  \n');
-      markdown.appendMarkdown('\n---\n\n');
-    }
+    this.appendUsages(markdown, sid);
     markdown.appendMarkdown('**Definition:** local struct  \n');
     markdown.appendMarkdown('**Source:** `' + this.escapeCode(vscode.workspace.asRelativePath(document.uri, false)) + '`  \n');
     markdown.appendMarkdown('**Line:** ' + (line + 1));
     return new vscode.Hover(markdown, range);
+  }
+
+  private appendUsages(markdown: vscode.MarkdownString, sid: string): void {
+    const references = this.index.findReferences(sid);
+    if (references.length === 0) return;
+
+    markdown.appendMarkdown('\n**Used by:**  \n');
+    const shown = references.slice(0, 5);
+    for (const reference of shown) {
+      const owner = reference.owner && reference.owner !== sid ? reference.owner + ' — ' : '';
+      const source = vscode.workspace.asRelativePath(reference.uri, false);
+      markdown.appendMarkdown(
+        '- ' + this.escape(owner) + '`' + this.escapeCode(source) + ':' + (reference.range.start.line + 1) + '`  \n'
+      );
+    }
+    if (references.length > shown.length) {
+      markdown.appendMarkdown('- *…' + (references.length - shown.length) + ' more references*  \n');
+    }
+    markdown.appendMarkdown('**References:** ' + references.length + '  \n');
   }
 
   private async readStructPreview(uri: vscode.Uri, startLine: number): Promise<StructPreview | undefined> {

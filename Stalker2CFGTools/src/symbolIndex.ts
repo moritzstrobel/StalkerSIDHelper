@@ -17,6 +17,18 @@ export interface PrototypeNode {
   refurl?: string;
 }
 
+export interface StructPathInfo {
+  names: string[];
+  path: string;
+  depth: number;
+}
+
+export interface PatchTarget {
+  uri: vscode.Uri;
+  range: vscode.Range;
+  path: string;
+}
+
 export interface InheritanceStep {
   sid: string;
   uri?: vscode.Uri;
@@ -130,6 +142,66 @@ export class SymbolIndex {
       depth -= (line.match(/struct\.end\b/g) ?? []).length;
       if (depth < 0) depth = 0;
     }
+  }
+
+  getStructPath(uri: vscode.Uri, lineNumber: number): StructPathInfo | undefined {
+    const file = this.fileTexts.get(uri.toString());
+    if (!file) return undefined;
+
+    const stack: string[] = [];
+    for (let line = 0; line <= lineNumber && line < file.lines.length; line++) {
+      const text = file.lines[line];
+      const match = text.match(STRUCT_DEFINITION);
+      if (match) stack.push(match[1]);
+
+      const ends = (text.match(/struct\.end\b/g) ?? []).length;
+      for (let i = 0; i < ends; i++) stack.pop();
+    }
+
+    if (stack.length === 0) return undefined;
+    return { names: [...stack], path: stack.join('.'), depth: stack.length - 1 };
+  }
+
+  findPatchTargetAt(patchUri: vscode.Uri, lineNumber: number): PatchTarget | undefined {
+    const path = this.getStructPath(patchUri, lineNumber);
+    if (!path) return undefined;
+
+    const topLevel = this.findPatchTarget(path.names[0], patchUri);
+    if (!topLevel) return undefined;
+    if (path.names.length === 1) {
+      return { uri: topLevel.uri, range: topLevel.range, path: path.path };
+    }
+
+    const file = this.fileTexts.get(topLevel.uri.toString());
+    if (!file) return undefined;
+
+    const stack: Array<{ name: string; line: number; character: number }> = [];
+    for (let line = topLevel.range.start.line; line < file.lines.length; line++) {
+      const text = file.lines[line];
+      const match = text.match(STRUCT_DEFINITION);
+      if (match) {
+        const character = text.indexOf(match[1]);
+        stack.push({ name: match[1], line, character });
+        const names = stack.map((entry) => entry.name);
+        if (names.length === path.names.length && names.every((name, index) => name === path.names[index])) {
+          const current = stack[stack.length - 1];
+          return {
+            uri: topLevel.uri,
+            range: new vscode.Range(
+              new vscode.Position(current.line, current.character),
+              new vscode.Position(current.line, current.character + current.name.length)
+            ),
+            path: path.path
+          };
+        }
+      }
+
+      const ends = (text.match(/struct\.end\b/g) ?? []).length;
+      for (let i = 0; i < ends; i++) stack.pop();
+      if (line > topLevel.range.start.line && stack.length === 0) break;
+    }
+
+    return undefined;
   }
 
   findPatchTarget(sid: string, patchUri: vscode.Uri): PrototypeNode | undefined {

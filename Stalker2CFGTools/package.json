@@ -7,7 +7,9 @@
   "engines": {
     "vscode": "^1.95.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": [
+    "Programming Languages"
+  ],
   "activationEvents": [
     "onLanguage:stalker2-cfg"
   ],
@@ -16,8 +18,13 @@
     "languages": [
       {
         "id": "stalker2-cfg",
-        "aliases": ["STALKER 2 CFG", "stalker2-cfg"],
-        "extensions": [".cfg"],
+        "aliases": [
+          "STALKER 2 CFG",
+          "stalker2-cfg"
+        ],
+        "extensions": [
+          ".cfg"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -26,12 +33,24 @@
       "properties": {
         "stalker2Cfg.referencePaths": {
           "type": "array",
-          "default": ["Python/VanillaReference", "GameLite/GameData"],
-          "items": { "type": "string" },
+          "default": [
+            "Python/VanillaReference",
+            "GameLite/GameData"
+          ],
+          "items": {
+            "type": "string"
+          },
           "description": "Workspace-relative folders that should be included when indexing CFG SID definitions."
         }
       }
-    }
+    },
+    "grammars": [
+      {
+        "language": "stalker2-cfg",
+        "scopeName": "source.stalker2cfg",
+        "path": "./syntaxes/stalker2-cfg.tmLanguage.json"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

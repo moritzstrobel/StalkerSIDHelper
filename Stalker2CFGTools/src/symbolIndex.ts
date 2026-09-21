@@ -1,11 +1,29 @@
 import * as vscode from 'vscode';
 import { DefinitionKind, SidDefinition } from './types';
 
-const STRUCT_DEFINITION = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*struct\.begin\b/;
+const STRUCT_DEFINITION = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*struct\.begin\b(?:\s*\{([^}]*)\})?/;
 const SID_ASSIGNMENT = /^\s*SID\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\b/;
 const decoder = new TextDecoder('utf-8');
 const IDENTIFIER = /\b[A-Za-z_][A-Za-z0-9_]*\b/g;
 const ENUM_VALUE = /\b(E[A-Za-z_][A-Za-z0-9_]*)::([A-Za-z_][A-Za-z0-9_]*)\b/g;
+
+export interface PrototypeNode {
+  sid: string;
+  uri: vscode.Uri;
+  range: vscode.Range;
+  isReference: boolean;
+  kind: 'definition' | 'patch';
+  parent?: string;
+  refurl?: string;
+}
+
+export interface InheritanceStep {
+  sid: string;
+  uri?: vscode.Uri;
+  isReference?: boolean;
+  unresolved?: boolean;
+  cycle?: boolean;
+}
 
 export interface SidReference {
   sid: string;
@@ -36,6 +54,7 @@ export interface IndexStats {
 
 export class SymbolIndex {
   private readonly definitions = new Map<string, SidDefinition[]>();
+  private readonly prototypes = new Map<string, PrototypeNode[]>();
   private readonly references = new Map<string, SidReference[]>();
   private readonly enumUsages = new Map<string, Map<string, EnumUsage[]>>();
   private readonly fileTexts = new Map<string, { uri: vscode.Uri; lines: string[] }>();
@@ -47,6 +66,7 @@ export class SymbolIndex {
 
   clear(): void {
     this.definitions.clear();
+    this.prototypes.clear();
     this.references.clear();
     this.enumUsages.clear();
     this.fileTexts.clear();
@@ -95,11 +115,100 @@ export class SymbolIndex {
     for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
       const line = lines[lineNumber];
       const structMatch = line.match(STRUCT_DEFINITION);
-      if (structMatch) this.add(structMatch[1], uri, lineNumber, line.indexOf(structMatch[1]), 'struct');
+      if (structMatch) {
+        const sid = structMatch[1];
+        const character = line.indexOf(sid);
+        this.add(sid, uri, lineNumber, character, 'struct');
+        this.addPrototype(sid, uri, lineNumber, character, structMatch[2]);
+      }
 
       const sidMatch = line.match(SID_ASSIGNMENT);
       if (sidMatch) this.add(sidMatch[1], uri, lineNumber, line.indexOf(sidMatch[1]), 'sid');
     }
+  }
+
+  findPrototype(sid: string, sourceUri?: vscode.Uri): PrototypeNode | undefined {
+    const entries = [...(this.prototypes.get(sid) ?? [])].filter((entry) => entry.kind === 'definition');
+    return this.sortPrototypeCandidates(entries, sourceUri)[0];
+  }
+
+  findPatches(sid: string): PrototypeNode[] {
+    return [...(this.prototypes.get(sid) ?? [])]
+      .filter((entry) => entry.kind === 'patch')
+      .sort((a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath) || a.range.start.line - b.range.start.line);
+  }
+
+  getInheritanceChain(sid: string, sourceUri?: vscode.Uri, maxDepth = 32): InheritanceStep[] {
+    const chain: InheritanceStep[] = [];
+    const visited = new Set<string>();
+    let currentSid = sid;
+    let currentSource = sourceUri;
+
+    for (let depth = 0; depth < maxDepth; depth++) {
+      const key = currentSid.toLowerCase();
+      if (visited.has(key)) {
+        chain.push({ sid: currentSid, cycle: true });
+        break;
+      }
+      visited.add(key);
+
+      const node = this.findPrototype(currentSid, currentSource);
+      if (!node) {
+        chain.push({ sid: currentSid, unresolved: true });
+        break;
+      }
+
+      chain.push({ sid: node.sid, uri: node.uri, isReference: node.isReference });
+      if (!node.parent || /^\[\d+\]$/.test(node.parent)) break;
+
+      currentSid = node.parent;
+      currentSource = node.refurl ? this.resolveBaseGameRef(node.refurl) : node.uri;
+    }
+
+    return chain;
+  }
+
+  private addPrototype(
+    sid: string,
+    uri: vscode.Uri,
+    line: number,
+    character: number,
+    attributes?: string
+  ): void {
+    const refurl = attributes?.match(/(?:^|;)\s*refurl\s*=\s*([^;}]+)/)?.[1]?.trim();
+    const refkey = attributes?.match(/(?:^|;)\s*refkey\s*=\s*([^;}]+)/)?.[1]?.trim();
+    const bpatch = attributes
+      ? /(?:^|;)\s*bpatch(?:\s*(?:=\s*true)?)?(?=;|$)/i.test(attributes.trim())
+      : false;
+    const range = new vscode.Range(
+      new vscode.Position(line, character),
+      new vscode.Position(line, character + sid.length)
+    );
+    const entries = this.prototypes.get(sid) ?? [];
+    entries.push({
+      sid,
+      uri,
+      range,
+      isReference: this.isReferencePath(uri),
+      kind: bpatch ? 'patch' : 'definition',
+      parent: bpatch ? undefined : refkey,
+      refurl: bpatch ? undefined : refurl
+    });
+    this.prototypes.set(sid, entries);
+  }
+
+  private sortPrototypeCandidates(entries: PrototypeNode[], sourceUri?: vscode.Uri): PrototypeNode[] {
+    return entries.sort((a, b) => {
+      if (sourceUri) {
+        const source = sourceUri.toString();
+        const aLocal = a.uri.toString() === source ? 1 : 0;
+        const bLocal = b.uri.toString() === source ? 1 : 0;
+        if (aLocal !== bLocal) return bLocal - aLocal;
+      }
+      const referenceDifference = Number(b.isReference) - Number(a.isReference);
+      if (referenceDifference !== 0) return referenceDifference;
+      return a.uri.fsPath.localeCompare(b.uri.fsPath) || a.range.start.line - b.range.start.line;
+    });
   }
 
   resolveBaseGameRef(refurl: string): vscode.Uri | undefined {
@@ -289,6 +398,11 @@ export class SymbolIndex {
 
   private removeFile(uri: vscode.Uri): void {
     this.fileTexts.delete(uri.toString());
+    for (const [sid, entries] of this.prototypes) {
+      const filtered = entries.filter((entry) => entry.uri.toString() !== uri.toString());
+      if (filtered.length === 0) this.prototypes.delete(sid);
+      else if (filtered.length !== entries.length) this.prototypes.set(sid, filtered);
+    }
     // References depend on the complete set of known definitions. A full
     // rebuild recreates them; live file updates refresh them below.
     for (const [sid, entries] of this.definitions) {

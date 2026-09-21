@@ -51,7 +51,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
 
     const preview = primary.kind === 'struct' ? await this.readStructPreview(primary.uri, primary.range.start.line) : undefined;
     const markdown = new vscode.MarkdownString();
-    markdown.appendMarkdown('## 🔷 ' + this.escape(sid) + '\n');
+    markdown.appendMarkdown('## ' + this.escape(sid) + '\n');
 
     this.appendReference(markdown, preview?.reference, primary.uri);
     this.appendInheritance(markdown, sid, primary.uri);
@@ -95,7 +95,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     if (values.length === 0) return undefined;
 
     const markdown = new vscode.MarkdownString();
-    markdown.appendMarkdown('## 🟣 ' + this.escape(type) + '\n\n');
+    markdown.appendMarkdown('## ' + this.escape(type) + '\n\n');
     markdown.appendMarkdown('**Observed values in indexed CFG files**\n\n');
 
     for (const entry of values) {
@@ -139,7 +139,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     preview?: StructPreview
   ): vscode.Hover {
     const markdown = new vscode.MarkdownString();
-    markdown.appendMarkdown('## 🔷 ' + this.escape(sid) + '\n');
+    markdown.appendMarkdown('## ' + this.escape(sid) + '\n');
     this.appendReference(markdown, preview?.reference, document.uri);
     this.appendInheritance(markdown, sid, document.uri);
     this.appendPatches(markdown, sid);
@@ -160,9 +160,9 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
       const step = chain[i];
       const prefix = i === 0 ? '' : '→ ';
       let suffix = '';
-      if (step.cycle) suffix = '  ⚠️ **cycle**';
-      else if (step.unresolved) suffix = '  ⚠️ **unresolved**';
-      else if (step.isReference) suffix = '  🟦 *Base/Reference*';
+      if (step.cycle) suffix = '  **cycle**';
+      else if (step.unresolved) suffix = '  **unresolved**';
+      else if (step.isReference) suffix = '  *Base/Reference*';
       markdown.appendMarkdown(prefix + '`' + this.escapeCode(step.sid) + '`' + suffix + '  \n');
     }
   }
@@ -255,7 +255,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const isBaseReference = this.index.isReferenceUri(uri);
 
     if (reference.bpatch) {
-      markdown.appendMarkdown('\n🩹 **Patch:** modifies existing node  \n');
+      markdown.appendMarkdown('\n**Patch:** modifies existing node  \n');
       return;
     }
 
@@ -265,8 +265,8 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
         : '`' + this.escapeCode(reference.refkey) + '`';
 
       markdown.appendMarkdown(
-        '🟦 **Base:** ` + this.escapeCode(reference.refurl) + '`  \n' +
-        '🧬 **Parent:** ' + rootLabel + '  \n'
+        '**Base:** ` + this.escapeCode(reference.refurl) + '`  \n' +
+        '**Parent:** ' + rootLabel + '  \n'
       );
       return;
     }
@@ -276,20 +276,20 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
       // VanillaReference file it adds no useful inheritance information.
       if (/^\[\d+\]$/.test(reference.refkey)) {
         if (!isBaseReference) {
-          markdown.appendMarkdown('🟦 **Base:** current prototype root ` + this.escapeCode(reference.refkey) + '`  \n');
+          markdown.appendMarkdown('**Base:** current prototype root ` + this.escapeCode(reference.refkey) + '`  \n');
         }
       } else {
-        markdown.appendMarkdown('🧬 **Parent:** ` + this.escapeCode(reference.refkey) + '`  \n');
+        markdown.appendMarkdown('**Parent:** ` + this.escapeCode(reference.refkey) + '`  \n');
       }
       return;
     }
 
-    markdown.appendMarkdown('🟦 **Base:** ` + this.escapeCode(reference.refurl!) + '`  \n');
+    markdown.appendMarkdown('**Base:** ` + this.escapeCode(reference.refurl!) + '`  \n');
   }
 
 
-  private heading(markdown: vscode.MarkdownString, title: string, icon: string): void {
-    markdown.appendMarkdown('\n---\n\n### ' + icon + ' ' + this.escape(title) + '\n\n');
+  private heading(markdown: vscode.MarkdownString, title: string, _icon?: string): void {
+    markdown.appendMarkdown('\n---\n\n### ' + this.escape(title) + '\n\n');
   }
 
   private badge(value: string): string {

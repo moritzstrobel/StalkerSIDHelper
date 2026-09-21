@@ -41,6 +41,11 @@
             "type": "string"
           },
           "description": "Workspace-relative folders that should be included when indexing CFG SID definitions."
+        },
+        "stalker2Cfg.enableIndexing": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable workspace-wide CFG SID indexing for Go to Definition and Hover. Disable this for startup/crash diagnostics."
         }
       }
     },

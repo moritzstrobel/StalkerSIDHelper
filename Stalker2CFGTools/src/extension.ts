@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { StalkerDefinitionProvider } from './definitionProvider';
+import { StalkerHoverProvider } from './hoverProvider';
 import { SymbolIndex } from './symbolIndex';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -17,10 +18,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   await rebuildIndex();
 
+  const selector: vscode.DocumentSelector = { language: 'stalker2-cfg', scheme: 'file' };
+
   context.subscriptions.push(
     vscode.languages.registerDefinitionProvider(
-      { language: 'stalker2-cfg', scheme: 'file' },
+      selector,
       new StalkerDefinitionProvider(index)
+    ),
+    vscode.languages.registerHoverProvider(
+      selector,
+      new StalkerHoverProvider(index)
     )
   );
 

@@ -102,6 +102,36 @@ export class SymbolIndex {
     }
   }
 
+  resolveBaseGameRef(refurl: string): vscode.Uri | undefined {
+    if (!refurl.toLowerCase().startsWith('@basegame/')) return undefined;
+
+    const requested = refurl.substring('@BaseGame/'.length).replace(/\\/g, '/').toLowerCase();
+    const fileName = requested.substring(requested.lastIndexOf('/') + 1);
+    const basePaths = this.referencePaths();
+
+    const candidates = [...this.fileTexts.values()]
+      .map((entry) => entry.uri)
+      .filter((uri) => {
+        const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+        const lower = relative.toLowerCase();
+        if (!basePaths.some((base) => lower === base || lower.startsWith(base + '/'))) return false;
+        return lower.endsWith('/' + requested) || lower.endsWith('/' + fileName) || lower === fileName;
+      })
+      .sort((a, b) => {
+        const ar = vscode.workspace.asRelativePath(a, false).replace(/\\/g, '/').toLowerCase();
+        const br = vscode.workspace.asRelativePath(b, false).replace(/\\/g, '/').toLowerCase();
+        const aFull = ar.endsWith('/' + requested) ? 0 : 1;
+        const bFull = br.endsWith('/' + requested) ? 0 : 1;
+        return aFull - bFull || ar.localeCompare(br);
+      });
+
+    return candidates[0];
+  }
+
+  isReferenceUri(uri: vscode.Uri): boolean {
+    return this.isReferencePath(uri);
+  }
+
   findEnumValues(type: string): EnumValueSummary[] {
     const values = this.enumUsages.get(type);
     if (!values) return [];
@@ -239,15 +269,18 @@ export class SymbolIndex {
     this.definitions.set(sid, entries);
   }
 
-  private isReferencePath(uri: vscode.Uri): boolean {
-    const configuredPaths = vscode.workspace.getConfiguration('stalker2Cfg').get<string[]>('referencePaths', []);
-    if (!vscode.workspace.getWorkspaceFolder(uri)) return false;
+  private referencePaths(): string[] {
+    return vscode.workspace.getConfiguration('stalker2Cfg').get<string[]>('referencePaths', [])
+      .map((configuredPath) => configuredPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '').toLowerCase())
+      .filter((configuredPath) => configuredPath.length > 0);
+  }
 
+  private isReferencePath(uri: vscode.Uri): boolean {
+    if (!vscode.workspace.getWorkspaceFolder(uri)) return false;
     const relativePath = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/').toLowerCase();
-    return configuredPaths.some((configuredPath) => {
-      const normalized = configuredPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '').toLowerCase();
-      return relativePath === normalized || relativePath.startsWith(normalized + '/');
-    });
+    return this.referencePaths().some(
+      (base) => relativePath === base || relativePath.startsWith(base + '/')
+    );
   }
 
   private kindPriority(kind: DefinitionKind): number {

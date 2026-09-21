@@ -448,7 +448,7 @@ export class SymbolIndex {
       if (!node.parent || /^\[\d+\]$/.test(node.parent)) break;
 
       currentSid = node.parent;
-      currentSource = node.refurl ? this.resolveBaseGameRef(node.refurl) : node.uri;
+      currentSource = node.refurl ? this.resolveRefUrl(node.refurl, node.uri) : node.uri;
     }
 
     return chain;
@@ -497,6 +497,38 @@ export class SymbolIndex {
     });
   }
 
+  resolveRefUrl(refurl: string, sourceUri: vscode.Uri): vscode.Uri | undefined {
+    if (refurl.toLowerCase().startsWith('@basegame/')) {
+      return this.resolveBaseGameRef(refurl);
+    }
+
+    const normalized = refurl.trim().replace(/\\/g, '/');
+    if (!normalized) return undefined;
+
+    // Relative refurls are resolved from the directory containing the CFG
+    // that declares them. Only indexed CFG files are accepted as targets.
+    const sourceDirectory = vscode.Uri.joinPath(sourceUri, '..');
+    const resolved = vscode.Uri.joinPath(sourceDirectory, ...normalized.split('/'));
+    const indexed = this.fileTexts.get(resolved.toString());
+    if (indexed) return indexed.uri;
+
+    // Some vanilla reference dumps are flattened. If the exact relative path
+    // is unavailable, fall back only when the basename is unique inside the
+    // configured Vanilla reference folder.
+    if (this.isReferencePath(sourceUri)) {
+      const fileName = normalized.substring(normalized.lastIndexOf('/') + 1).toLowerCase();
+      const candidates = [...this.fileTexts.values()]
+        .map((entry) => entry.uri)
+        .filter((uri) =>
+          this.isReferencePath(uri) &&
+          uri.path.substring(uri.path.lastIndexOf('/') + 1).toLowerCase() === fileName
+        );
+      if (candidates.length === 1) return candidates[0];
+    }
+
+    return undefined;
+  }
+
   resolveBaseGameRef(refurl: string): vscode.Uri | undefined {
     if (!refurl.toLowerCase().startsWith('@basegame/')) return undefined;
 
@@ -520,7 +552,17 @@ export class SymbolIndex {
         return aFull - bFull || ar.localeCompare(br);
       });
 
-    return candidates[0];
+    if (candidates.length === 0) return undefined;
+    const firstRelative = vscode.workspace.asRelativePath(candidates[0], false).replace(/\\/g, '/').toLowerCase();
+    if (firstRelative.endsWith('/' + requested)) return candidates[0];
+
+    // A flattened Vanilla dump can only be resolved safely by basename when
+    // exactly one candidate exists.
+    const basenameMatches = candidates.filter((uri) => {
+      const relative = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/').toLowerCase();
+      return relative.endsWith('/' + fileName) || relative === fileName;
+    });
+    return basenameMatches.length === 1 ? basenameMatches[0] : undefined;
   }
 
   isReferenceUri(uri: vscode.Uri): boolean {

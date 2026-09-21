@@ -49,6 +49,23 @@
         "scopeName": "source.stalker2cfg",
         "path": "./syntaxes/stalker2-cfg.tmLanguage.json"
       }
+    ],
+    "commands": [
+      {
+        "command": "stalker2Cfg.rebuildIndex",
+        "title": "Rebuild Index",
+        "category": "STALKER 2 CFG"
+      },
+      {
+        "command": "stalker2Cfg.rebuildReferences",
+        "title": "Rebuild References",
+        "category": "STALKER 2 CFG"
+      },
+      {
+        "command": "stalker2Cfg.rebuildEnums",
+        "title": "Rebuild Enums",
+        "category": "STALKER 2 CFG"
+      }
     ]
   },
   "scripts": {

@@ -89,27 +89,42 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const property = this.index.getPropertyAt(document.uri, position.line);
     if (!property || property.key !== word) return undefined;
 
-    const comparison = this.index.comparePatchedProperty(document.uri, position.line);
+    const comparison = this.index.compareProperty(document.uri, position.line);
     const markdown = new vscode.MarkdownString();
     markdown.appendMarkdown('## ' + this.escape(property.key) + '\n\n');
     markdown.appendMarkdown('**Value:** `' + this.escapeCode(property.value) + '`  \n');
     markdown.appendMarkdown('**Path:** `' + this.escapeCode(property.propertyPath) + '`  \n');
 
-    if (comparison?.targetStruct) {
+    if (comparison?.mode === 'patch') {
+      markdown.appendMarkdown('**Mode:** patch  \n');
       if (comparison.target) {
         markdown.appendMarkdown('**Vanilla:** `' + this.escapeCode(comparison.target.value) + '`  \n');
-        const source = vscode.workspace.asRelativePath(comparison.target.uri, false).replace(/\\\\/g, '/');
-        const fileName = source.split('/').pop() ?? source;
-        markdown.appendMarkdown(
-          '**Target:** `' + this.escapeCode(fileName) + ':' +
-          (comparison.target.range.start.line + 1) + '`'
-        );
+        this.appendPropertySource(markdown, comparison.target);
       } else {
-        markdown.appendMarkdown('**Vanilla:** *not defined directly on target struct*');
+        markdown.appendMarkdown('**Vanilla:** *not defined directly on patch target*');
+      }
+    } else if (comparison?.mode === 'inheritance') {
+      markdown.appendMarkdown('**Mode:** override  \n');
+      if (comparison.target) {
+        markdown.appendMarkdown('**Inherited:** `' + this.escapeCode(comparison.target.value) + '`  \n');
+        if (comparison.inheritedFrom) {
+          markdown.appendMarkdown('**From:** `' + this.escapeCode(comparison.inheritedFrom) + '`  \n');
+        }
+        this.appendPropertySource(markdown, comparison.target);
+      } else {
+        markdown.appendMarkdown('**Inherited:** *no matching property found in parent chain*');
       }
     }
 
     return new vscode.Hover(markdown, range);
+  }
+
+  private appendPropertySource(markdown: vscode.MarkdownString, property: { uri: vscode.Uri; range: vscode.Range }): void {
+    const source = vscode.workspace.asRelativePath(property.uri, false).replace(/\\\\/g, '/');
+    const fileName = source.split('/').pop() ?? source;
+    markdown.appendMarkdown(
+      '**Source:** `' + this.escapeCode(fileName) + ':' + (property.range.start.line + 1) + '`'
+    );
   }
 
   private buildEnumHover(

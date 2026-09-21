@@ -104,7 +104,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
   ): vscode.Hover {
     const markdown = new vscode.MarkdownString();
     markdown.appendMarkdown('**' + this.escape(sid) + '**\n\n');
-    if (preview?.parent) markdown.appendMarkdown('**Parent:** `' + this.escapeCode(preview.parent) + '`  \n');
+    this.appendReference(markdown, preview?.reference);
     if (preview && preview.properties.length > 0) {
       markdown.appendMarkdown('\n');
       for (const property of preview.properties) {

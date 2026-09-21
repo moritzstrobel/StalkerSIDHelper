@@ -108,11 +108,10 @@ export class SymbolIndex {
     const batchSize = 25;
     for (let i = 0; i < files.length; i += batchSize) {
       const batch = files.slice(i, i + batchSize);
-      await Promise.all(batch.map((uri) => this.indexFile(uri)));
+      await Promise.all(batch.map((uri) => this.indexFile(uri, false)));
     }
 
-    this.buildReferences();
-    this.buildEnums();
+    this.rebuildDerivedIndexes();
     const definitions = Array.from(this.definitions.values()).reduce((sum, entries) => sum + entries.length, 0);
     const stats = {
       files: files.length,
@@ -125,7 +124,7 @@ export class SymbolIndex {
     return stats;
   }
 
-  async indexFile(uri: vscode.Uri): Promise<void> {
+  async indexFile(uri: vscode.Uri, rebuildDerived = true): Promise<void> {
     this.removeFile(uri);
 
     let bytes: Uint8Array;
@@ -159,6 +158,15 @@ export class SymbolIndex {
       depth -= (line.match(/struct\.end\b/g) ?? []).length;
       if (depth < 0) depth = 0;
     }
+
+    // References and enum usages are derived from the complete workspace
+    // snapshot. Keep them in sync after a live create/change event.
+    if (rebuildDerived) this.rebuildDerivedIndexes();
+  }
+
+  private rebuildDerivedIndexes(): void {
+    this.buildReferences();
+    this.buildEnums();
   }
 
   getStructPath(uri: vscode.Uri, lineNumber: number): StructPathInfo | undefined {

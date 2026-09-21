@@ -54,6 +54,8 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     markdown.appendMarkdown('**' + this.escape(sid) + '**\n\n');
 
     this.appendReference(markdown, preview?.reference, primary.uri);
+    this.appendInheritance(markdown, sid, primary.uri);
+    this.appendPatches(markdown, sid);
 
     this.appendUsages(markdown, sid);
 
@@ -138,11 +140,45 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const markdown = new vscode.MarkdownString();
     markdown.appendMarkdown('**' + this.escape(sid) + '**\n\n');
     this.appendReference(markdown, preview?.reference, document.uri);
+    this.appendInheritance(markdown, sid, document.uri);
+    this.appendPatches(markdown, sid);
     this.appendUsages(markdown, sid);
     markdown.appendMarkdown('**Definition:** local struct  \n');
     markdown.appendMarkdown('**Source:** `' + this.escapeCode(vscode.workspace.asRelativePath(document.uri, false)) + '`  \n');
     markdown.appendMarkdown('**Line:** ' + (line + 1));
     return new vscode.Hover(markdown, range);
+  }
+
+  private appendInheritance(markdown: vscode.MarkdownString, sid: string, sourceUri: vscode.Uri): void {
+    const chain = this.index.getInheritanceChain(sid, sourceUri);
+    if (chain.length <= 1) return;
+
+    markdown.appendMarkdown('**Inheritance chain:**  \n');
+    for (let i = 0; i < chain.length; i++) {
+      const step = chain[i];
+      const prefix = i === 0 ? '' : '→ ';
+      let suffix = '';
+      if (step.cycle) suffix = ' ⚠ cycle';
+      else if (step.unresolved) suffix = ' ⚠ unresolved';
+      else if (step.isReference) suffix = ' [Base/Reference]';
+      markdown.appendMarkdown(prefix + '`' + this.escapeCode(step.sid) + '`' + suffix + '  \n');
+    }
+  }
+
+  private appendPatches(markdown: vscode.MarkdownString, sid: string): void {
+    const patches = this.index.findPatches(sid);
+    if (patches.length === 0) return;
+
+    markdown.appendMarkdown('**Patches:**  \n');
+    for (const patch of patches.slice(0, 5)) {
+      markdown.appendMarkdown(
+        '- `' + this.escapeCode(vscode.workspace.asRelativePath(patch.uri, false)) +
+        ':' + (patch.range.start.line + 1) + '`  \n'
+      );
+    }
+    if (patches.length > 5) {
+      markdown.appendMarkdown('- *…' + (patches.length - 5) + ' more patches*  \n');
+    }
   }
 
   private appendUsages(markdown: vscode.MarkdownString, sid: string): void {

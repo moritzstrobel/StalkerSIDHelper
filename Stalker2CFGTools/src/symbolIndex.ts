@@ -4,6 +4,14 @@ import { DefinitionKind, SidDefinition } from './types';
 const STRUCT_DEFINITION = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*struct\.begin\b/;
 const SID_ASSIGNMENT = /^\s*SID\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\b/;
 const decoder = new TextDecoder('utf-8');
+const IDENTIFIER = /\b[A-Za-z_][A-Za-z0-9_]*\b/g;
+
+export interface SidReference {
+  sid: string;
+  uri: vscode.Uri;
+  range: vscode.Range;
+  owner?: string;
+}
 
 export interface IndexStats {
   files: number;
@@ -14,6 +22,8 @@ export interface IndexStats {
 
 export class SymbolIndex {
   private readonly definitions = new Map<string, SidDefinition[]>();
+  private readonly references = new Map<string, SidReference[]>();
+  private readonly fileTexts = new Map<string, { uri: vscode.Uri; lines: string[] }>();
   private output?: vscode.OutputChannel;
 
   constructor(output?: vscode.OutputChannel) {
@@ -22,6 +32,8 @@ export class SymbolIndex {
 
   clear(): void {
     this.definitions.clear();
+    this.references.clear();
+    this.fileTexts.clear();
   }
 
   async rebuild(): Promise<IndexStats> {
@@ -39,6 +51,7 @@ export class SymbolIndex {
       this.output?.appendLine('Indexed ' + Math.min(i + batch.length, files.length) + '/' + files.length + ' ' + this.memory());
     }
 
+    this.buildReferences();
     const definitions = Array.from(this.definitions.values()).reduce((sum, entries) => sum + entries.length, 0);
     const stats = {
       files: files.length,
@@ -68,6 +81,7 @@ export class SymbolIndex {
 
     const text = decoder.decode(bytes);
     const lines = text.split(/\r?\n/);
+    this.fileTexts.set(uri.toString(), { uri, lines });
 
     for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
       const line = lines[lineNumber];
@@ -76,6 +90,58 @@ export class SymbolIndex {
 
       const sidMatch = line.match(SID_ASSIGNMENT);
       if (sidMatch) this.add(sidMatch[1], uri, lineNumber, line.indexOf(sidMatch[1]), 'sid');
+    }
+  }
+
+  findReferences(sid: string): SidReference[] {
+    return [...(this.references.get(sid) ?? [])].sort(
+      (a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath) || a.range.start.line - b.range.start.line
+    );
+  }
+
+  private buildReferences(): void {
+    this.references.clear();
+    const known = new Set(this.definitions.keys());
+
+    for (const { uri, lines } of this.fileTexts.values()) {
+      let owner: string | undefined;
+      let depth = 0;
+
+      for (let lineNumber = 0; lineNumber < lines.length; lineNumber++) {
+        const line = lines[lineNumber];
+        const topStruct = line.match(STRUCT_DEFINITION);
+        if (topStruct && depth === 0) owner = topStruct[1];
+
+        IDENTIFIER.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = IDENTIFIER.exec(line)) !== null) {
+          const sid = match[0];
+          if (!known.has(sid)) continue;
+
+          const definitionsHere = this.definitions.get(sid) ?? [];
+          const isDefinition = definitionsHere.some(
+            (d) => d.uri.toString() === uri.toString() &&
+              d.range.start.line === lineNumber &&
+              d.range.start.character === match!.index
+          );
+          if (isDefinition) continue;
+
+          const range = new vscode.Range(
+            new vscode.Position(lineNumber, match.index),
+            new vscode.Position(lineNumber, match.index + sid.length)
+          );
+          const entries = this.references.get(sid) ?? [];
+          entries.push({ sid, uri, range, owner });
+          this.references.set(sid, entries);
+        }
+
+        depth += (line.match(/struct\.begin\b/g) ?? []).length;
+        depth -= (line.match(/struct\.end\b/g) ?? []).length;
+        if (depth <= 0) {
+          depth = 0;
+          owner = undefined;
+        }
+      }
     }
   }
 
@@ -117,11 +183,20 @@ export class SymbolIndex {
     });
   }
 
-  private memory(): string {\n    const usage = process.memoryUsage();\n    const mb = (value: number) => (value / 1024 / 1024).toFixed(1) + ' MB';\n    return '[rss=' + mb(usage.rss) + ', heapUsed=' + mb(usage.heapUsed) + ']';\n  }\n\n  private kindPriority(kind: DefinitionKind): number {
+  private memory(): string {
+    const usage = process.memoryUsage();
+    const mb = (value: number) => (value / 1024 / 1024).toFixed(1) + ' MB';
+    return '[rss=' + mb(usage.rss) + ', heapUsed=' + mb(usage.heapUsed) + ']';
+  }
+
+  private kindPriority(kind: DefinitionKind): number {
     return kind === 'struct' ? 0 : 1;
   }
 
   private removeFile(uri: vscode.Uri): void {
+    this.fileTexts.delete(uri.toString());
+    // References depend on the complete set of known definitions. A full
+    // rebuild recreates them; live file updates refresh them below.
     for (const [sid, entries] of this.definitions) {
       const filtered = entries.filter((entry) => entry.uri.toString() !== uri.toString());
       if (filtered.length === 0) this.definitions.delete(sid);

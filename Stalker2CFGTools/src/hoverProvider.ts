@@ -159,9 +159,11 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
       return;
     }
 
+    const source = vscode.workspace.asRelativePath(target.uri, false);
+    const fileName = source.replace(/\\\\/g, '/').split('/').pop() ?? source;
     markdown.appendMarkdown(
-      '**Target:** `' + this.escapeCode(vscode.workspace.asRelativePath(target.uri, false)) +
-      ':' + (target.range.start.line + 1) + '`  \\n'
+      '**Target:** `' + this.escapeCode(fileName) +
+      ':' + (target.range.start.line + 1) + '`  \n'
     );
   }
 

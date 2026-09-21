@@ -28,6 +28,9 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
 
     const sid = document.getText(range);
 
+    const enumHover = this.buildEnumHover(document, position, range, sid);
+    if (enumHover) return enumHover;
+
     // A struct header under the cursor is a local definition. Nested names such
     // as "PostShooting" are intentionally reused all over the CFG data and must
     // not be resolved through the global SID index.
@@ -68,6 +71,42 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     }
 
     markdown.appendMarkdown('\n\n*F12 / Ctrl+Click to open definition*');
+    return new vscode.Hover(markdown, range);
+  }
+
+  private buildEnumHover(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    range: vscode.Range,
+    word: string
+  ): vscode.Hover | undefined {
+    const line = document.lineAt(position.line).text;
+    const enumMatch = line.match(/\b(E[A-Za-z_][A-Za-z0-9_]*)::([A-Za-z_][A-Za-z0-9_]*)\b/);
+    if (!enumMatch) return undefined;
+
+    const type = enumMatch[1];
+    const value = enumMatch[2];
+    if (word !== type && word !== value) return undefined;
+
+    const values = this.index.findEnumValues(type);
+    if (values.length === 0) return undefined;
+
+    const markdown = new vscode.MarkdownString();
+    markdown.appendMarkdown('**' + this.escape(type) + '**\n\n');
+    markdown.appendMarkdown('*Observed values in indexed CFG files:*\n\n');
+
+    for (const entry of values) {
+      const current = entry.value === value ? ' **← current**' : '';
+      markdown.appendMarkdown('- `' + this.escapeCode(entry.value) + '` — ' + entry.count + ' usage' + (entry.count === 1 ? '' : 's') + current + '\n');
+    }
+
+    const total = values.reduce((sum, entry) => sum + entry.count, 0);
+    markdown.appendMarkdown(
+      '\n**' + values.length + ' observed value' + (values.length === 1 ? '' : 's') +
+      ' · ' + total + ' usages**'
+    );
+    markdown.appendMarkdown('\n\n*Observed from CFG data; this may not be the complete engine enum.*');
+
     return new vscode.Hover(markdown, range);
   }
 

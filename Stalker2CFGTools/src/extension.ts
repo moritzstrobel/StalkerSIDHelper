@@ -51,6 +51,39 @@ export function activate(context: vscode.ExtensionContext): void {
     return rebuild;
   };
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('stalker2Cfg.rebuildIndex', async () => {
+      if (!indexingEnabled()) {
+        void vscode.window.showWarningMessage('STALKER 2 CFG indexing is disabled.');
+        return;
+      }
+      await rebuildIndex();
+      void vscode.window.showInformationMessage('STALKER 2 CFG index rebuilt.');
+    }),
+    vscode.commands.registerCommand('stalker2Cfg.rebuildReferences', () => {
+      if (!indexingEnabled()) {
+        void vscode.window.showWarningMessage('STALKER 2 CFG indexing is disabled.');
+        return;
+      }
+      output.appendLine('Rebuilding reference index...');
+      const count = index.rebuildReferences();
+      output.appendLine('Reference index ready: ' + count + ' references.');
+      void vscode.window.showInformationMessage('STALKER 2 CFG references rebuilt: ' + count + ' references.');
+    }),
+    vscode.commands.registerCommand('stalker2Cfg.rebuildEnums', () => {
+      if (!indexingEnabled()) {
+        void vscode.window.showWarningMessage('STALKER 2 CFG indexing is disabled.');
+        return;
+      }
+      output.appendLine('Rebuilding enum index...');
+      const stats = index.rebuildEnums();
+      output.appendLine('Enum index ready: ' + stats.types + ' types, ' + stats.values + ' values, ' + stats.usages + ' usages.');
+      void vscode.window.showInformationMessage(
+        'STALKER 2 CFG enums rebuilt: ' + stats.types + ' types, ' + stats.values + ' values.'
+      );
+    })
+  );
+
   if (indexingEnabled()) {
     void rebuildIndex();
   } else {

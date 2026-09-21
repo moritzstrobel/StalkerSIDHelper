@@ -214,8 +214,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
   private appendReference(markdown: vscode.MarkdownString, reference: StructReference | undefined, uri: vscode.Uri): void {
     if (!reference) return;
 
-    const source = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
-    const isBaseReference = this.isBaseReferenceSource(source);
+    const isBaseReference = this.index.isReferenceUri(uri);
 
     if (reference.bpatch) {
       markdown.appendMarkdown('**Patch:** modifies existing node  \n');
@@ -250,10 +249,6 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     markdown.appendMarkdown('**Base:** `' + this.escapeCode(reference.refurl!) + '`  \n');
   }
 
-  private isBaseReferenceSource(relativePath: string): boolean {
-    const normalized = relativePath.replace(/\\/g, '/').toLowerCase();
-    return normalized.includes('/vanillareference/') || normalized.startsWith('python/vanillareference/');
-  }
 
   private escape(value: string): string {
     return value.replace(/([\\`*_{}\[\]()#+\-.!])/g, '\\$1');

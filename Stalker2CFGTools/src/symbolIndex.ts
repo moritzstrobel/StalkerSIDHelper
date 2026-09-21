@@ -132,13 +132,28 @@ export class SymbolIndex {
     }
   }
 
+  findPatchTarget(sid: string, patchUri: vscode.Uri): PrototypeNode | undefined {
+    const entries = [...(this.prototypes.get(sid) ?? [])]
+      .filter((entry) => entry.kind === 'definition' && entry.isReference);
+    if (entries.length === 0) return undefined;
+
+    const patchName = patchUri.path.substring(patchUri.path.lastIndexOf('/') + 1);
+    const stem = patchName.replace(/\.cfg$/i, '').replace(/_patch(?:_.*)?$/i, '').toLowerCase();
+    const sameFamily = entries.filter((entry) => {
+      const name = entry.uri.path.substring(entry.uri.path.lastIndexOf('/') + 1).replace(/\.cfg$/i, '').toLowerCase();
+      return name === stem;
+    });
+
+    return (sameFamily.length === 1 ? sameFamily[0] : undefined);
+  }
+
   findPrototype(sid: string, sourceUri?: vscode.Uri): PrototypeNode | undefined {
     const entries = [...(this.prototypes.get(sid) ?? [])].filter((entry) => entry.kind === 'definition');
 
     // A mod bpatch always targets the vanilla definition. Do not let another
     // mod definition with the same SID become the inheritance root.
     if (sourceUri && this.isPatchAt(sourceUri, sid)) {
-      return this.sortPrototypeCandidates(entries.filter((entry) => entry.isReference), sourceUri)[0];
+      return this.findPatchTarget(sid, sourceUri);
     }
 
     return this.sortPrototypeCandidates(entries, sourceUri)[0];

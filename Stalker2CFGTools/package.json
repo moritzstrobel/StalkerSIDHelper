@@ -1,0 +1,46 @@
+{
+  "name": "stalker2-cfg-tools",
+  "displayName": "STALKER 2 CFG Tools",
+  "description": "VS Code tooling for STALKER 2 CFG files with SID navigation.",
+  "version": "0.0.1",
+  "publisher": "moritzstrobel",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": [
+    "onLanguage:stalker2-cfg"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "stalker2-cfg",
+        "aliases": ["STALKER 2 CFG", "stalker2-cfg"],
+        "extensions": [".cfg"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configuration": {
+      "title": "STALKER 2 CFG Tools",
+      "properties": {
+        "stalker2Cfg.referencePaths": {
+          "type": "array",
+          "default": ["Python/VanillaReference", "GameLite/GameData"],
+          "items": { "type": "string" },
+          "description": "Workspace-relative folders that should be included when indexing CFG SID definitions."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.95.0",
+    "typescript": "^5.7.2"
+  }
+}

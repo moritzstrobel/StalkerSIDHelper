@@ -21,6 +21,16 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     if (!range) return undefined;
 
     const sid = document.getText(range);
+
+    // A struct header under the cursor is a local definition. Nested names such
+    // as "PostShooting" are intentionally reused all over the CFG data and must
+    // not be resolved through the global SID index.
+    const localStruct = this.localStructAtPosition(document, position, range, sid);
+    if (localStruct) {
+      const preview = await this.readStructPreview(document.uri, localStruct.line);
+      return this.buildLocalStructHover(document, range, sid, localStruct.line, preview);
+    }
+
     const definitions = this.index.find(sid, document.uri);
     if (definitions.length === 0) return undefined;
 
@@ -59,6 +69,48 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     }
 
     markdown.appendMarkdown('\n\n*F12 / Ctrl+Click to open definition*');
+    return new vscode.Hover(markdown, range);
+  }
+
+  private localStructAtPosition(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+    wordRange: vscode.Range,
+    sid: string
+  ): { line: number } | undefined {
+    const line = document.lineAt(position.line).text;
+    const match = line.match(STRUCT_HEADER);
+    if (!match) return undefined;
+
+    const nameMatch = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/);
+    if (!nameMatch || nameMatch[1] !== sid) return undefined;
+
+    const start = line.indexOf(nameMatch[1]);
+    const nameRange = new vscode.Range(position.line, start, position.line, start + nameMatch[1].length);
+    return nameRange.intersection(wordRange) ? { line: position.line } : undefined;
+  }
+
+  private buildLocalStructHover(
+    document: vscode.TextDocument,
+    range: vscode.Range,
+    sid: string,
+    line: number,
+    preview?: StructPreview
+  ): vscode.Hover {
+    const markdown = new vscode.MarkdownString();
+    markdown.appendMarkdown('**' + this.escape(sid) + '**\n\n');
+    if (preview?.parent) markdown.appendMarkdown('**Parent:** `' + this.escapeCode(preview.parent) + '`  \n');
+    if (preview && preview.properties.length > 0) {
+      markdown.appendMarkdown('\n');
+      for (const property of preview.properties) {
+        markdown.appendMarkdown('**' + this.escape(property.key) + ':** `' + this.escapeCode(property.value) + '`  \n');
+      }
+      if (preview.truncated) markdown.appendMarkdown('*…more properties in definition*  \n');
+      markdown.appendMarkdown('\n---\n\n');
+    }
+    markdown.appendMarkdown('**Definition:** local struct  \n');
+    markdown.appendMarkdown('**Source:** `' + this.escapeCode(vscode.workspace.asRelativePath(document.uri, false)) + '`  \n');
+    markdown.appendMarkdown('**Line:** ' + (line + 1));
     return new vscode.Hover(markdown, range);
   }
 

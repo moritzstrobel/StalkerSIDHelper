@@ -42,6 +42,8 @@ export interface PropertyComparison {
   local: PropertyInfo;
   target?: PropertyInfo;
   targetStruct?: PatchTarget;
+  mode?: 'patch' | 'inheritance';
+  inheritedFrom?: string;
 }
 
 export interface InheritanceStep {
@@ -203,18 +205,55 @@ export class SymbolIndex {
     };
   }
 
-  comparePatchedProperty(uri: vscode.Uri, lineNumber: number): PropertyComparison | undefined {
+  compareProperty(uri: vscode.Uri, lineNumber: number): PropertyComparison | undefined {
     const local = this.getPropertyAt(uri, lineNumber);
     if (!local) return undefined;
 
     const struct = this.getStructPath(uri, lineNumber);
     if (!struct) return { local };
 
-    const targetStruct = this.findPatchTargetAt(uri, this.findStructHeaderLine(uri, lineNumber, struct.names.length));
-    if (!targetStruct) return { local };
+    const headerLine = this.findStructHeaderLine(uri, lineNumber, struct.names.length);
+    const targetStruct = this.findPatchTargetAt(uri, headerLine);
+    if (targetStruct) {
+      const target = this.findDirectProperty(targetStruct.uri, targetStruct.range.start.line, local.key);
+      return { local, target, targetStruct, mode: 'patch' };
+    }
 
-    const target = this.findDirectProperty(targetStruct.uri, targetStruct.range.start.line, local.key);
-    return { local, target, targetStruct };
+    // For normal mod definitions, resolve the top-level refkey/refurl chain and
+    // look for the same nested struct path below each parent prototype.
+    const topHeader = this.findStructHeaderLine(uri, lineNumber, 1);
+    const file = this.fileTexts.get(uri.toString());
+    const topMatch = file?.lines[topHeader]?.match(STRUCT_DEFINITION);
+    const topSid = topMatch?.[1];
+    if (!topSid) return { local };
+
+    const chain = this.getInheritanceChain(topSid, uri);
+    const nestedPath = struct.names.slice(1);
+    for (const step of chain.slice(1)) {
+      if (!step.uri || step.unresolved || step.cycle) continue;
+      const parent = this.findPrototype(step.sid, step.uri);
+      if (!parent) continue;
+
+      const nested = this.findNestedStruct(parent.uri, parent.range.start.line, nestedPath);
+      if (!nested) continue;
+      const target = this.findDirectProperty(nested.uri, nested.range.start.line, local.key);
+      if (target) {
+        return {
+          local,
+          target,
+          targetStruct: nested,
+          mode: 'inheritance',
+          inheritedFrom: step.sid
+        };
+      }
+    }
+
+    return { local, mode: chain.length > 1 ? 'inheritance' : undefined };
+  }
+
+  // Kept for callers while the property model is being expanded.
+  comparePatchedProperty(uri: vscode.Uri, lineNumber: number): PropertyComparison | undefined {
+    return this.compareProperty(uri, lineNumber);
   }
 
   private findStructHeaderLine(uri: vscode.Uri, lineNumber: number, depth: number): number {
@@ -228,6 +267,50 @@ export class SymbolIndex {
       for (let i = 0; i < ends; i++) stack.pop();
     }
     return stack[Math.max(0, depth - 1)] ?? lineNumber;
+  }
+
+  private findNestedStruct(uri: vscode.Uri, topLine: number, names: string[]): PatchTarget | undefined {
+    if (names.length === 0) {
+      const top = this.fileTexts.get(uri.toString())?.lines[topLine]?.match(STRUCT_DEFINITION);
+      if (!top) return undefined;
+      const character = this.fileTexts.get(uri.toString())!.lines[topLine].indexOf(top[1]);
+      return {
+        uri,
+        range: new vscode.Range(
+          new vscode.Position(topLine, character),
+          new vscode.Position(topLine, character + top[1].length)
+        ),
+        path: top[1]
+      };
+    }
+
+    const file = this.fileTexts.get(uri.toString());
+    if (!file) return undefined;
+    const stack: Array<{ name: string; line: number; character: number }> = [];
+    for (let line = topLine; line < file.lines.length; line++) {
+      const text = file.lines[line];
+      const match = text.match(STRUCT_DEFINITION);
+      if (match) {
+        const character = text.indexOf(match[1]);
+        stack.push({ name: match[1], line, character });
+        const relative = stack.slice(1).map((entry) => entry.name);
+        if (relative.length === names.length && relative.every((name, i) => name === names[i])) {
+          const current = stack[stack.length - 1];
+          return {
+            uri,
+            range: new vscode.Range(
+              new vscode.Position(current.line, current.character),
+              new vscode.Position(current.line, current.character + current.name.length)
+            ),
+            path: stack.map((entry) => entry.name).join('.')
+          };
+        }
+      }
+      const ends = (text.match(/struct\.end\b/g) ?? []).length;
+      for (let i = 0; i < ends; i++) stack.pop();
+      if (line > topLine && stack.length === 0) break;
+    }
+    return undefined;
   }
 
   private findDirectProperty(uri: vscode.Uri, structLine: number, key: string): PropertyInfo | undefined {

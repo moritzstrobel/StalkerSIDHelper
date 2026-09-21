@@ -7,8 +7,13 @@ const PROPERTY = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$/;
 const MAX_PROPERTIES = 10;
 const decoder = new TextDecoder('utf-8');
 
+interface StructReference {
+  refurl?: string;
+  refkey?: string;
+}
+
 interface StructPreview {
-  parent?: string;
+  reference?: StructReference;
   properties: Array<{ key: string; value: string }>;
   truncated: boolean;
 }
@@ -44,7 +49,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const markdown = new vscode.MarkdownString();
     markdown.appendMarkdown('**' + this.escape(sid) + '**\n\n');
 
-    if (preview?.parent) markdown.appendMarkdown('**Parent:** `' + this.escapeCode(preview.parent) + '`  \n');
+    this.appendReference(markdown, preview?.reference);
 
     if (preview && preview.properties.length > 0) {
       markdown.appendMarkdown('\n');
@@ -122,7 +127,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
       if (header === undefined) return undefined;
 
       const headerMatch = header.match(STRUCT_HEADER);
-      const parent = this.extractParent(headerMatch?.[1]);
+      const reference = this.extractReference(headerMatch?.[1]);
       const properties: Array<{ key: string; value: string }> = [];
       let depth = 1;
       let truncated = false;
@@ -146,16 +151,40 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
         depth -= ends;
       }
 
-      return { parent, properties, truncated };
+      return { reference, properties, truncated };
     } catch {
       return undefined;
     }
   }
 
-  private extractParent(attributes?: string): string | undefined {
+  private extractReference(attributes?: string): StructReference | undefined {
     if (!attributes) return undefined;
-    const match = attributes.match(/(?:refkey|refurl)\s*=\s*([^,}]+)/);
-    return match?.[1]?.trim();
+    const refurl = attributes.match(/(?:^|;)\s*refurl\s*=\s*([^;}]+)/)?.[1]?.trim();
+    const refkey = attributes.match(/(?:^|;)\s*refkey\s*=\s*([^;}]+)/)?.[1]?.trim();
+    if (!refurl && !refkey) return undefined;
+    return { refurl, refkey };
+  }
+
+  private appendReference(markdown: vscode.MarkdownString, reference?: StructReference): void {
+    if (!reference) return;
+
+    if (reference.refurl && reference.refkey) {
+      markdown.appendMarkdown(
+        '**Reference:** `' + this.escapeCode(reference.refurl) + '` → `' + this.escapeCode(reference.refkey) + '`  \n'
+      );
+      return;
+    }
+
+    if (reference.refkey) {
+      if (/^\[\d+\]$/.test(reference.refkey)) {
+        markdown.appendMarkdown('**Reference:** base entry `' + this.escapeCode(reference.refkey) + '`  \n');
+      } else {
+        markdown.appendMarkdown('**Parent:** `' + this.escapeCode(reference.refkey) + '`  \n');
+      }
+      return;
+    }
+
+    markdown.appendMarkdown('**Reference file:** `' + this.escapeCode(reference.refurl!) + '`  \n');
   }
 
   private escape(value: string): string {

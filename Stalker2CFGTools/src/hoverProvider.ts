@@ -141,7 +141,7 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     const markdown = new vscode.MarkdownString();
     markdown.appendMarkdown('## ' + this.escape(sid) + '\n');
     this.appendReference(markdown, preview?.reference, document.uri);
-    if (preview?.reference?.bpatch) this.appendPatchTarget(markdown, sid, document.uri);
+    if (preview?.reference?.bpatch) this.appendPatchTarget(markdown, sid, document.uri, line);
     this.appendInheritance(markdown, sid, document.uri);
     if (!preview?.reference?.bpatch) this.appendPatches(markdown, sid, document.uri);
     this.appendUsages(markdown, sid);
@@ -152,18 +152,26 @@ export class StalkerHoverProvider implements vscode.HoverProvider {
     return new vscode.Hover(markdown, range);
   }
 
-  private appendPatchTarget(markdown: vscode.MarkdownString, sid: string, sourceUri: vscode.Uri): void {
-    const target = this.index.findPatchTarget(sid, sourceUri);
+  private appendPatchTarget(
+    markdown: vscode.MarkdownString,
+    sid: string,
+    sourceUri: vscode.Uri,
+    line: number
+  ): void {
+    const path = this.index.getStructPath(sourceUri, line);
+    const target = this.index.findPatchTargetAt(sourceUri, line);
     if (!target) {
-      markdown.appendMarkdown('**Target:** *unresolved*  \n');
+      const label = path?.path ?? sid;
+      markdown.appendMarkdown('**Target:** `' + this.escapeCode(label) + '` *unresolved*  \n');
       return;
     }
 
     const source = vscode.workspace.asRelativePath(target.uri, false);
     const fileName = source.replace(/\\\\/g, '/').split('/').pop() ?? source;
+    const nested = path && path.depth > 0 ? '  \n**Path:** `' + this.escapeCode(path.path) + '`' : '';
     markdown.appendMarkdown(
       '**Target:** `' + this.escapeCode(fileName) +
-      ':' + (target.range.start.line + 1) + '`  \n'
+      ':' + (target.range.start.line + 1) + '`' + nested + '  \n'
     );
   }
 

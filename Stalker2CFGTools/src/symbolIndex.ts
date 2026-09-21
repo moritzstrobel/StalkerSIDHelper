@@ -39,16 +39,11 @@ export class SymbolIndex {
   async rebuild(): Promise<IndexStats> {
     const started = Date.now();
     this.clear();
-    this.output?.appendLine('Discovering CFG files... ' + this.memory());
-
     const files = await vscode.workspace.findFiles('**/*.cfg', '**/{node_modules,.git,out,dist}/**');
-    this.output?.appendLine('Found ' + files.length + ' CFG files. ' + this.memory());
-
     const batchSize = 25;
     for (let i = 0; i < files.length; i += batchSize) {
       const batch = files.slice(i, i + batchSize);
       await Promise.all(batch.map((uri) => this.indexFile(uri)));
-      this.output?.appendLine('Indexed ' + Math.min(i + batch.length, files.length) + '/' + files.length + ' ' + this.memory());
     }
 
     this.buildReferences();
@@ -60,10 +55,7 @@ export class SymbolIndex {
       durationMs: Date.now() - started
     };
 
-    this.output?.appendLine('Symbols: ' + stats.symbols);
-    this.output?.appendLine('Definitions: ' + stats.definitions);
-    this.output?.appendLine('Index completed in ' + stats.durationMs + ' ms.');
-    this.output?.appendLine('Index ready.');
+    this.output?.appendLine('Index ready: ' + stats.files + ' files, ' + stats.symbols + ' symbols, ' + stats.definitions + ' definitions in ' + stats.durationMs + ' ms.');
     return stats;
   }
 
@@ -181,12 +173,6 @@ export class SymbolIndex {
       const normalized = configuredPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '').toLowerCase();
       return relativePath === normalized || relativePath.startsWith(normalized + '/');
     });
-  }
-
-  private memory(): string {
-    const usage = process.memoryUsage();
-    const mb = (value: number) => (value / 1024 / 1024).toFixed(1) + ' MB';
-    return '[rss=' + mb(usage.rss) + ', heapUsed=' + mb(usage.heapUsed) + ']';
   }
 
   private kindPriority(kind: DefinitionKind): number {

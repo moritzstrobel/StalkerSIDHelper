@@ -117,7 +117,13 @@ export class SymbolIndex {
     });
   }
 
-  private memory(): string {\n    const usage = process.memoryUsage();\n    const mb = (value: number) => (value / 1024 / 1024).toFixed(1) + ' MB';\n    return '[rss=' + mb(usage.rss) + ', heapUsed=' + mb(usage.heapUsed) + ']';\n  }\n\n  private kindPriority(kind: DefinitionKind): number {
+  private memory(): string {
+    const usage = process.memoryUsage();
+        const mb = (value: number) => (value / 1024 / 1024).toFixed(1) + ' MB';
+            return '[rss=' + mb(usage.rss) + ', heapUsed=' + mb(usage.heapUsed) + ']';
+            }
+            
+            private kindPriority(kind: DefinitionKind): number {
     return kind === 'struct' ? 0 : 1;
   }
 

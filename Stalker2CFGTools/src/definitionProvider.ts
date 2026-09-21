@@ -16,7 +16,7 @@ export class StalkerDefinitionProvider implements vscode.DefinitionProvider {
     }
 
     const sid = document.getText(range);
-    const definitions = this.index.find(sid);
+    const definitions = this.index.find(sid, document.uri);
 
     if (definitions.length === 0) {
       return undefined;
